@@ -38,4 +38,4 @@ Este repositório é servido diretamente pelo GitHub Pages (branch `main`, raiz 
 
 ## Repositório Desktop
 
-O executável Windows é gerado no repositório **[IJ_3D_manager](https://github.com/seu-usuario/IJ_3D_manager)**.
+O executável Windows é gerado no repositório **[IJ_3D_manager](https://github.com/IllanSpala/IJ_3D_manager/)**.
