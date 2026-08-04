@@ -6,37 +6,37 @@ Construído com uma arquitetura híbrida, ele funciona tanto como um aplicativo 
 
 ---
 
-## 🚀 Funcionalidades Principais
+##  Funcionalidades Principais
 
 O sistema é dividido em abas modulares, cada uma focada em uma etapa crucial do gerenciamento da impressão 3D:
 
-*   📋 **Pedidos (Kanban)**
+*    **Pedidos (Kanban)**
     *   Gestão visual de encomendas com colunas de status (*A Modelar*, *A Imprimir*, *Impresso/Pintando*, *Enviando/Concluído*).
     *   Adição dinâmica de produtos ou itens avulsos a um pedido.
     *   Acompanhamento de preços cobrados, cliente e datas de entrega.
-*   🏃‍♂️ **Sprint (Produção)**
+*    **Sprint (Produção)**
     *   Foco total na área de manufatura. Aqui, os produtos de cada pedido são "quebrados" em partes e subpeças.
     *   Controle individual de modelagem, fatiamento e status da impressão de cada peça que compõe o produto final.
-*   🧵 **Filamentos**
+*    **Filamentos**
     *   Gerenciamento de estoque de bobinas (PLA, ABS, PETG, TPU, etc).
     *   Controle de peso restante, marca, cor e precificação.
     *   Rastreio do status da bobina (Ativo, Esgotado, Arquivado).
-*   📦 **Almoxarifado (Insumos)**
+*    **Almoxarifado (Insumos)**
     *   Controle de tintas, colas, parafusos, rolamentos, ferramentas e peças de reposição (nozzles, correias).
     *   Monitoramento de quantidade e alertas visuais para insumos esgotados.
-*   📚 **Acervo**
+*    **Acervo**
     *   Catálogo de modelos 3D prontos que a loja oferece.
     *   Organização de portfólio para rápida inserção em novos pedidos.
-*   💰 **Financeiro e Precificação**
+*    **Financeiro e Precificação**
     *   Calculadora de custo avançada integrada aos filamentos.
     *   Cálculo baseado no peso do fatiador, custo do material, custo de energia (tempo de máquina), taxa de falhas e lucro desejado.
-*   📊 **Sumário (Dashboard)**
+*    **Sumário (Dashboard)**
     *   Visão geral da saúde financeira do negócio.
     *   Balanço de despesas e receitas.
 
 ---
 
-## 🛠 Arquitetura e Tecnologias
+##  Arquitetura e Tecnologias
 
 Este projeto foca em alta performance e simplicidade, não utilizando pesados frameworks frontend de terceiros.
 
@@ -50,7 +50,7 @@ Este projeto foca em alta performance e simplicidade, não utilizando pesados fr
 
 ---
 
-## 💻 Instalação e Uso (Desktop)
+##  Instalação e Uso (Desktop)
 
 ### Pré-requisitos
 Certifique-se de ter o [Node.js](https://nodejs.org/) (versão 18+ recomendada) instalado no seu sistema.
@@ -72,7 +72,7 @@ Certifique-se de ter o [Node.js](https://nodejs.org/) (versão 18+ recomendada) 
 
 ---
 
-## 💾 Sistema de Backup e Restauração
+##  Sistema de Backup e Restauração
 
 O IJ 3D Manager possui um sistema resiliente de proteção de dados:
 *   Para fazer o backup, acesse a janela correspondente e baixe o seu `.zip`.
@@ -81,7 +81,7 @@ O IJ 3D Manager possui um sistema resiliente de proteção de dados:
 
 ---
 
-## 👥 Contribuição e Manutenção
+##  Contribuição e Manutenção
 
 O código é estritamente separado em controladores de "abas" localizados na pasta `js/tabs/`. 
 *   Todas as interações com o banco de dados passam pela ponte assíncrona localizada em `js/db.js`.
@@ -90,4 +90,3 @@ O código é estritamente separado em controladores de "abas" localizados na pas
 
 ---
 
-**IJ 3D Manager** — Otimizando o fluxo da impressão 3D da modelagem à entrega final.
