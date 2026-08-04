@@ -99,7 +99,14 @@ ipcMain.handle('write-db', async (event, req) => {
                     if (rows && rows.length > 0) {
                         await createTableFromObj(rows[0]);
                         await runQuery(`DELETE FROM "${storeName}"`); // replace strategy
-                        for (const r of rows) await insertObj(r);
+                        await runQuery('BEGIN TRANSACTION');
+                        try {
+                            for (const r of rows) await insertObj(r);
+                            await runQuery('COMMIT');
+                        } catch(e) {
+                            await runQuery('ROLLBACK');
+                            throw e;
+                        }
                     }
                 } else if (action === 'put') {
                     if (obj) {

@@ -126,11 +126,12 @@ export async function render(container) {
                         const pieceNum = prodIndex + 1;
                         const nomeProd = esc(item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca || 'Produto');
                         const prodEntry  = pedPartes.find(pt => String(pt.item_id) === String(item.id) && pt.is_produto);
-                        const prodStatus = prodEntry ? prodEntry.status : 'A_MODELAR';
+                        const rawProdStatus = prodEntry ? prodEntry.status : 'A_MODELAR';
+                        const prodStatus = String(rawProdStatus || '').toUpperCase().replace('_', ' ').trim();
                         const prodObs    = prodEntry ? (prodEntry.obs || '') : '';
                         const prodColor  = sColor(prodStatus);
                         const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !pt.is_produto);
-                        const concCount  = (prodStatus === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => pt.status === 'CONCLUIDO').length;
+                        const concCount  = (prodStatus === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => String(pt.status || '').toUpperCase().replace('_', ' ').trim() === 'CONCLUIDO').length;
                         const totCount   = 1 + subPartes.length;
                         totalConc += concCount;
                         totalAll  += totCount;
@@ -140,7 +141,8 @@ export async function render(container) {
                         let partesHTML = '';
                         subPartes.forEach((pt, ptIndex) => {
                             const partNum = ptIndex + 1;
-                            const cor = sColor(pt.status || 'A_MODELAR');
+                            const ptNormStatus = String(pt.status || 'A_MODELAR').toUpperCase().replace('_', ' ').trim();
+                            const cor = sColor(ptNormStatus);
                             partesHTML += `
                             <div style="background:#1c1c1c;border:1px solid #2a2a2a;border-left:4px solid ${cor};border-radius:6px;padding:9px 11px;margin-bottom:7px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">

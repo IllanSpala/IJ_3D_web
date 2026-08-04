@@ -171,6 +171,7 @@ export async function getMedia(path) {
  * Set a meta key.
  */
 export async function setMeta(key, value) {
+    if (window.electron) return await window.electron.writeDB({ action: 'put', storeName: '_meta', obj: { id: key, value } });
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx  = db.transaction(META_STORE, 'readwrite');
@@ -185,6 +186,19 @@ export async function setMeta(key, value) {
  * Get a meta key.
  */
 export async function getMeta(key) {
+    if (window.electron) {
+        const rows = await window.electron.readDB('_meta');
+        const row = rows.find(r => r.id === key);
+        if (!row) return undefined;
+        let v = row.value;
+        try {
+            if (typeof v === 'string' && v.startsWith('{') && v.endsWith('}')) return JSON.parse(v);
+            if (typeof v === 'string' && v.startsWith('[') && v.endsWith(']')) return JSON.parse(v);
+            if (v === 'true') return true;
+            if (v === 'false') return false;
+        } catch (e) {}
+        return v;
+    }
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx  = db.transaction(META_STORE, 'readonly');
@@ -208,6 +222,13 @@ export async function isDataLoaded() {
  * Wipe everything (all stores).
  */
 export async function clearAll() {
+    if (window.electron) {
+        const tables = [...TABLE_STORES, 'pedidos', '_meta'];
+        for (const t of tables) {
+            await window.electron.writeDB({ action: 'clear', storeName: t });
+        }
+        return;
+    }
     const db = await openDB();
     const storeNames = [...db.objectStoreNames];
     return new Promise((resolve, reject) => {
