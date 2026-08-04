@@ -34,16 +34,16 @@ export async function render(container) {
         <div style="background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:18px 20px;margin-bottom:24px;box-shadow:0 8px 32px rgba(0,0,0,.45); flex-shrink:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
                 <div>
-                    <h2 style="font-size:1.35rem;font-weight:800;color:#fff;margin:0;">🏁 Sprint Atual</h2>
+                    <h2 style="font-size:1.35rem;font-weight:800;color:#fff;margin:0;">Sprint Atual</h2>
                     <p style="color:#888;font-size:.82rem;margin:4px 0 0;">Cada produto tem seu status e pode receber partes nomeadas por você.</p>
                 </div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
                     <select id="sp-sel" style="background:#111;border:1px solid #444;color:#eee;padding:9px 14px;border-radius:8px;font-size:.9rem;min-width:250px;">
                         <option value="">— Selecione um pedido —</option>
                     </select>
-                    <button onclick="window._sp.addPedido()" style="background:#3b82f6;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:600;cursor:pointer;">+ Adicionar à Sprint</button>
-                    <button onclick="window._sp.finalizarSprint()" style="background:#10b981;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:600;cursor:pointer;">🏁 Finalizar Sprint</button>
-                    <button onclick="window._sp.abrirHistorico()" style="background:#374151;border:none;color:#fff;padding:9px 14px;border-radius:8px;font-weight:600;cursor:pointer;">🕒 Histórico</button>
+                    <button onclick="window._sp.addPedido()" style="background:#3b82f6;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Adicionar à Sprint</button>
+                    <button onclick="window._sp.finalizarSprint()" style="background:#10b981;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Finalizar Sprint</button>
+                    <button onclick="window._sp.abrirHistorico()" style="background:#374151;border:none;color:#fff;padding:9px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Histórico</button>
                 </div>
             </div>
         </div>
@@ -57,7 +57,7 @@ export async function render(container) {
     <div id="sp-mhist" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;justify-content:center;align-items:center;padding:20px;" onclick="if(event.target===this)this.style.display='none'">
         <div style="background:#1a1a1a;width:100%;max-width:820px;max-height:88vh;border-radius:12px;border:1px solid #333;display:flex;flex-direction:column;">
             <div style="padding:14px 20px;border-bottom:1px solid #2e2e2e;display:flex;justify-content:space-between;align-items:center;">
-                <h3 style="color:#fff;margin:0;">🕒 Histórico de Sprints</h3>
+                <h3 style="color:#fff;margin:0;">Histórico de Sprints</h3>
                 <button onclick="document.getElementById('sp-mhist').style.display='none'" style="background:none;border:none;color:#aaa;font-size:1.6rem;cursor:pointer;">&times;</button>
             </div>
             <div id="sp-hbody" style="padding:20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;"></div>
@@ -72,8 +72,27 @@ export async function render(container) {
             const sprint  = await idb.getAll('producao_pedidos');
             const partes  = await idb.getAll('producao_partes');
 
-            // Normaliza itens: garante que todo item tenha um campo id estável
+            // ── Recuperação automática de pedidos_itens ──────────────
+            // Se pedidos_itens estiver vazio mas producao_partes tem dados,
+            // reconstruímos pedidos_itens a partir das entradas is_produto=true
             let rawItens = await idb.getAll('pedidos_itens');
+            if (rawItens.length === 0 && partes.length > 0) {
+                const isProduto = pt => pt.is_produto === true || pt.is_produto === 1 || pt.is_produto === '1' || pt.is_produto === 'true';
+                const produtoParts = partes.filter(isProduto);
+                if (produtoParts.length > 0) {
+                    rawItens = produtoParts.map(pt => ({
+                        id: pt.item_id,
+                        pedido_id: pt.pedido_id,
+                        tipo: 'avulso',
+                        nome_avulso: pt.nome || 'Produto',
+                        custo_est: 0
+                    }));
+                    await idb.putAll('pedidos_itens', rawItens);
+                    console.log(`[Sprint] Recuperados ${rawItens.length} itens de producao_partes → pedidos_itens`);
+                }
+            }
+
+            // Normaliza itens: garante que todo item tenha um campo id estável
             let needsSave = false;
             const itens = rawItens.map((it, i) => {
                 if (it.id == null || it.id === '') {
@@ -112,10 +131,11 @@ export async function render(container) {
             grid.innerHTML = '';
 
             for (const sp of sprint) {
-                const p = pedidos.find(x => String(x.id) === String(sp.pedido_id))
-                       || { id: sp.pedido_id, nome_cliente: 'Pedido #'+sp.pedido_id, data_entrega: '' };
-                const produtos  = itens.filter(i => String(i.pedido_id) === String(p.id));
-                const pedPartes = partes.filter(pt => String(pt.pedido_id) === String(p.id));
+                const spPedidoId = String(sp.pedido_id);
+                const p = pedidos.find(x => String(x.id) === spPedidoId)
+                       || { id: spPedidoId, nome_cliente: 'Pedido #'+spPedidoId, data_entrega: '' };
+                const produtos  = itens.filter(i => String(i.pedido_id) === spPedidoId);
+                const pedPartes = partes.filter(pt => String(pt.pedido_id) === spPedidoId);
 
                 let totalConc = 0, totalAll = 0, produtosHTML = '';
 
@@ -125,13 +145,15 @@ export async function render(container) {
                     produtos.forEach((item, prodIndex) => {
                         const pieceNum = prodIndex + 1;
                         const nomeProd = esc(item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca || 'Produto');
-                        const prodEntry  = pedPartes.find(pt => String(pt.item_id) === String(item.id) && pt.is_produto);
+                        const iP = pt => pt.is_produto === true || pt.is_produto === 1 || pt.is_produto === '1' || pt.is_produto === 'true';
+                        const prodEntry  = pedPartes.find(pt => String(pt.item_id) === String(item.id) && iP(pt));
                         const rawProdStatus = prodEntry ? prodEntry.status : 'A_MODELAR';
-                        const prodStatus = String(rawProdStatus || '').toUpperCase().replace('_', ' ').trim();
+                        const prodStatus = String(rawProdStatus || 'A_MODELAR').toUpperCase().replace(/[^A-Z]/g, '_').trim();
                         const prodObs    = prodEntry ? (prodEntry.obs || '') : '';
                         const prodColor  = sColor(prodStatus);
-                        const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !pt.is_produto);
-                        const concCount  = (prodStatus === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => String(pt.status || '').toUpperCase().replace('_', ' ').trim() === 'CONCLUIDO').length;
+                        const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !iP(pt));
+                        const normSt     = s => String(s || '').toUpperCase().replace(/[^A-Z]/g, '_').trim();
+                        const concCount  = (normSt(prodStatus) === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => normSt(pt.status) === 'CONCLUIDO').length;
                         const totCount   = 1 + subPartes.length;
                         totalConc += concCount;
                         totalAll  += totCount;
@@ -197,7 +219,7 @@ export async function render(container) {
                                 <h3 style="font-size:1.05rem;font-weight:800;color:#a78bfa;margin:0;">👤 ${esc(p.nome_cliente||'Cliente')}</h3>
                                 <div style="font-size:.72rem;color:#666;margin-top:3px;">ID: #${p.id}${p.data_entrega ? ` • Entrega: ${formatDate(p.data_entrega)}` : ''}</div>
                             </div>
-                            <button onclick="window._sp.removerPedido('${p.id}')"
+                            <button onclick="window._sp.removerPedido('${spPedidoId}')"
                                 style="background:none;border:1px solid #444;color:#d64545;font-size:.78rem;padding:4px 9px;border-radius:4px;cursor:pointer;white-space:nowrap;">✕ Remover</button>
                         </div>
                         <div style="margin-top:12px;">
@@ -270,7 +292,8 @@ export async function render(container) {
         async setStatusProduto(pedId, itemId, val) {
             try {
                 let pts = await idb.getAll('producao_partes');
-                let pt = pts.find(x => String(x.item_id) === String(itemId) && x.is_produto);
+                const iP = x => x.is_produto === true || x.is_produto === 1 || x.is_produto === '1' || x.is_produto === 'true';
+                let pt = pts.find(x => String(x.item_id) === String(itemId) && iP(x));
                 if (!pt) { pt = { id: Date.now(), pedido_id: String(pedId), item_id: String(itemId), is_produto: true, obs: '' }; pts.push(pt); }
                 pt.status = val;
                 await idb.putAll('producao_partes', pts);
@@ -281,7 +304,8 @@ export async function render(container) {
         async setObsProduto(pedId, itemId, val) {
             try {
                 let pts = await idb.getAll('producao_partes');
-                let pt = pts.find(x => String(x.item_id) === String(itemId) && x.is_produto);
+                const iP = x => x.is_produto === true || x.is_produto === 1 || x.is_produto === '1' || x.is_produto === 'true';
+                let pt = pts.find(x => String(x.item_id) === String(itemId) && iP(x));
                 if (!pt) { pt = { id: Date.now(), pedido_id: String(pedId), item_id: String(itemId), is_produto: true, status: 'A_MODELAR' }; pts.push(pt); }
                 pt.obs = val;
                 await idb.putAll('producao_partes', pts);

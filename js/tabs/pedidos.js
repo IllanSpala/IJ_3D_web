@@ -50,6 +50,66 @@ export async function render(container) {
             }
         }
 
+        /* ── Migração automática de itens embutidos nos pedidos ─── */
+        // Quando o backup do app Python é carregado, os itens podem vir
+        // embutidos nos próprios objetos de pedido. Se pedidos_itens está
+        // vazio mas pedidos_v2 tem dados, tenta extrair esses itens.
+        if (itens.length === 0 && p2.length > 0) {
+            let recoveredItens = [];
+            let counter = 1;
+
+            for (const ped of p2) {
+                // Campo "itens" ou "pecas" pode ser array serializado
+                let embeddedItems = [];
+
+                if (Array.isArray(ped.itens)) {
+                    embeddedItems = ped.itens;
+                } else if (typeof ped.itens === 'string') {
+                    try { embeddedItems = JSON.parse(ped.itens); } catch(e) {}
+                }
+                if (Array.isArray(ped.pecas)) {
+                    embeddedItems = [...embeddedItems, ...ped.pecas];
+                } else if (typeof ped.pecas === 'string') {
+                    try { embeddedItems = [...embeddedItems, ...JSON.parse(ped.pecas)]; } catch(e) {}
+                }
+
+                // Processar array de itens encontrado
+                for (const it of embeddedItems) {
+                    const nome = it.nome || it.nome_avulso || it.peca || it.nome_peca || it.name || '';
+                    if (!nome) continue;
+                    recoveredItens.push({
+                        id: Date.now() + counter++,
+                        pedido_id: ped.id,
+                        tipo: 'avulso',
+                        nome_avulso: nome,
+                        custo_est: parseFloat(it.custo_est || it.custo || it.valor || 0)
+                    });
+                }
+
+                // Caso o item venha como campo direto único (peca_nome, nome_peca, peca)
+                if (embeddedItems.length === 0) {
+                    const nomeDireto = ped.peca_nome || ped.nome_peca || ped.peca || '';
+                    if (nomeDireto) {
+                        recoveredItens.push({
+                            id: Date.now() + counter++,
+                            pedido_id: ped.id,
+                            tipo: 'avulso',
+                            nome_avulso: nomeDireto,
+                            custo_est: 0
+                        });
+                    }
+                }
+            }
+
+            if (recoveredItens.length > 0) {
+                itens = recoveredItens;
+                await idb.putAll('pedidos_itens', itens);
+                console.log(`[BD LOG] Migração de itens: ${recoveredItens.length} itens recuperados dos pedidos e salvos em pedidos_itens.`);
+            } else {
+                console.warn('[BD LOG] Nenhum item encontrado embutido nos pedidos. pedidos_itens permanece vazio.');
+            }
+        }
+
         return { pedidos: p2, itens, legacyCount: p1.length, migratedCount: countMigrated };
     }
 
