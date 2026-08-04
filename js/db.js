@@ -97,7 +97,10 @@ export async function putAll(storeName, rows) {
         const st = tx.objectStore(storeName);
         st.clear();
         for (const row of rows) {
-            st.add(row);
+            // Use the row's own id as the key if it exists, so that records
+            // imported from SQLite backup keep their original IDs.
+            const key = (row.id !== undefined && row.id !== null) ? row.id : undefined;
+            st.put(row, key);
         }
         tx.oncomplete = () => resolve();
         tx.onerror    = (e) => reject(e.target.error);

@@ -144,14 +144,20 @@ export async function render(container) {
                 } else {
                     produtos.forEach((item, prodIndex) => {
                         const pieceNum = prodIndex + 1;
-                        const nomeProd = esc(item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca || 'Produto');
                         const iP = pt => pt.is_produto === true || pt.is_produto === 1 || pt.is_produto === '1' || pt.is_produto === 'true';
                         const prodEntry  = pedPartes.find(pt => String(pt.item_id) === String(item.id) && iP(pt));
+                        // Nome do produto: tenta pedidos_itens primeiro, depois producao_partes, depois sub-parte
+                        const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !iP(pt));
+                        const nomeProd = esc(
+                            item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca ||
+                            (prodEntry && prodEntry.nome) ||
+                            (subPartes[0] && subPartes[0].nome) ||
+                            'Produto'
+                        );
                         const rawProdStatus = prodEntry ? prodEntry.status : 'A_MODELAR';
                         const prodStatus = String(rawProdStatus || 'A_MODELAR').toUpperCase().replace(/[^A-Z]/g, '_').trim();
                         const prodObs    = prodEntry ? (prodEntry.obs || '') : '';
                         const prodColor  = sColor(prodStatus);
-                        const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !iP(pt));
                         const normSt     = s => String(s || '').toUpperCase().replace(/[^A-Z]/g, '_').trim();
                         const concCount  = (normSt(prodStatus) === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => normSt(pt.status) === 'CONCLUIDO').length;
                         const totCount   = 1 + subPartes.length;
