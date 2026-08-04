@@ -72,6 +72,57 @@ export async function processBackup(file, onProgress = () => {}) {
         tablesProcessed++;
     }
 
+    /* 5.1 ── Migração automática de 'pedidos' antigos para 'pedidos_v2' ── */
+    try {
+        const p2 = await idb.getAll('pedidos_v2');
+        const p1 = await idb.getAll('pedidos');
+        const existingIds = new Set(p2.map(x => x.id));
+        let migratedCount = 0;
+
+        if (p1.length > 0) {
+            const newP2 = [...p2];
+            const pItens = await idb.getAll('pedidos_itens');
+
+            for (const oldP of p1) {
+                if (!existingIds.has(oldP.id)) {
+                    const mappedStatus = (oldP.status || 'A MODELAR').toUpperCase();
+                    const newEntry = {
+                        id: oldP.id || (Date.now() + Math.floor(Math.random() * 1000)),
+                        nome_cliente: oldP.nome_cliente || oldP.cliente || 'Cliente Desconhecido',
+                        data_entrega: oldP.data_entrega || oldP.data || '',
+                        valor_cobrado: parseFloat(oldP.valor_cobrado || oldP.valor || 0),
+                        status: mappedStatus,
+                        plataforma_venda: oldP.plataforma_venda || 'Direto'
+                    };
+                    newP2.push(newEntry);
+                    existingIds.add(newEntry.id);
+                    migratedCount++;
+
+                    // Se a tabela antiga continha o nome da peça
+                    if (oldP.peca || oldP.nome_peca) {
+                        pItens.push({
+                            id: Date.now() + Math.floor(Math.random() * 10000),
+                            pedido_id: newEntry.id,
+                            tipo: 'avulso',
+                            nome_avulso: oldP.peca || oldP.nome_peca,
+                            custo_est: 0
+                        });
+                    }
+                }
+            }
+
+            if (migratedCount > 0) {
+                await idb.putAll('pedidos_v2', newP2);
+                await idb.putAll('pedidos_itens', pItens);
+            }
+        }
+
+        const totalP2 = (await idb.getAll('pedidos_v2')).length;
+        console.log(`[BD LOG] Backup Processado: ${p2.length} pedidos em pedidos_v2, ${p1.length} pedidos em pedidos antigos. Migrados: ${migratedCount}. Total no IndexedDB: ${totalP2}`);
+    } catch (migErr) {
+        console.warn('[backup-loader] Aviso na migração de pedidos:', migErr.message);
+    }
+
     sqlDb.close();
 
     /* 6 ── Extract media files ──────────────────────────────── */

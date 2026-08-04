@@ -10,3 +10,8 @@ desktop.ini
 # Temp
 *.tmp
 *.log
+
+# Node & Electron
+node_modules/
+package-lock.json
+node_modules/

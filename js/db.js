@@ -5,26 +5,25 @@
    ═══════════════════════════════════════════════════════════════ */
 
 const DB_NAME    = 'IJ3D_WebCache';
-const DB_VERSION = 1;
+const DB_VERSION = 6;
 
 /* Tables from core/database.py that we replicate as object stores. */
 const TABLE_STORES = [
     'configuracoes',
     'filamentos',
-    'acervo',
-    'acervo_filamentos',
-    'acervo_impressoes',
-    'acervo_fotos_extras',
     'hist_impressoes',
     'hist_filamentos',
     'hist_fotos',
-    'kits_acervo',
-    'kit_itens',
     'ferramentas_insumos',
+    'pedidos',
     'pedidos_v2',
     'pedidos_itens',
     'manutencao',
     'historico_impressao',
+    'producao_partes',
+    'producao_pedidos',
+    'historico_sprints',
+    'vendas_manuais'
 ];
 
 /* Special stores */
@@ -74,7 +73,9 @@ function openDB() {
  * Clear a single store.
  */
 export async function clearStore(storeName) {
+    if (window.electron) return await window.electron.writeDB({ action: 'clear', storeName });
     const db = await openDB();
+    if (!db.objectStoreNames.contains(storeName)) return;
     return new Promise((resolve, reject) => {
         const tx  = db.transaction(storeName, 'readwrite');
         const st  = tx.objectStore(storeName);
@@ -88,7 +89,9 @@ export async function clearStore(storeName) {
  * Insert multiple rows into a store (clearing it first).
  */
 export async function putAll(storeName, rows) {
+    if (window.electron) return await window.electron.writeDB({ action: 'putAll', storeName, rows });
     const db = await openDB();
+    if (!db.objectStoreNames.contains(storeName)) return;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
         const st = tx.objectStore(storeName);
@@ -106,13 +109,24 @@ export async function putAll(storeName, rows) {
  * @returns {Promise<Array>}
  */
 export async function getAll(storeName) {
+    if (window.electron && !['media', '_meta'].includes(storeName)) {
+        let rows = await window.electron.readDB(storeName);
+        return rows.map(r => {
+            try { return JSON.parse(JSON.stringify(r), (k,v) => {
+                if (typeof v === 'string' && v.startsWith('{') && v.endsWith('}')) return JSON.parse(v);
+                if (typeof v === 'string' && v.startsWith('[') && v.endsWith(']')) return JSON.parse(v);
+                return v;
+            }); } catch(e) { return r; }
+        });
+    }
     const db = await openDB();
+    if (!db.objectStoreNames.contains(storeName)) return [];
     return new Promise((resolve, reject) => {
         const tx  = db.transaction(storeName, 'readonly');
         const st  = tx.objectStore(storeName);
         const req = st.getAll();
         req.onsuccess = () => resolve(req.result || []);
-        req.onerror   = (e) => reject(e.target.error);
+        req.onerror   = () => resolve([]);
     });
 }
 
@@ -122,6 +136,10 @@ export async function getAll(storeName) {
  * Store a media Blob by its relative path key.
  */
 export async function putMedia(path, blob) {
+    if (window.electron) {
+        const arrayBuffer = await blob.arrayBuffer();
+        return await window.electron.saveMedia(arrayBuffer, path);
+    }
     const db = await openDB();
     return new Promise((resolve, reject) => {
         const tx  = db.transaction(MEDIA_STORE, 'readwrite');
@@ -203,6 +221,22 @@ export async function clearAll() {
 }
 
 /**
+ * Get all keys from a store
+ * @param {string} storeName 
+ * @returns {Promise<Array>} Array of keys
+ */
+export async function getAllKeys(storeName) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = (e) => reject(e.target.error);
+    });
+}
+
+/**
  * Resolve a stored image filename to an object URL.
  * @param {string} storedPath  - filename as stored in the SQLite DB
  * @param {string} subfolder   - optional subfolder inside src_media/
@@ -211,7 +245,6 @@ export async function clearAll() {
 export async function resolveMediaUrl(storedPath, subfolder = '') {
     if (!storedPath) return null;
 
-    // Build the key as it appears inside the zip
     let key;
     if (storedPath.startsWith('src_media/')) {
         key = storedPath;
@@ -219,6 +252,10 @@ export async function resolveMediaUrl(storedPath, subfolder = '') {
         key = subfolder
             ? `src_media/${subfolder}/${storedPath}`
             : `src_media/${storedPath}`;
+    }
+
+    if (window.electron) {
+        return `ij3d://${key}`;
     }
 
     const blob = await getMedia(key);
