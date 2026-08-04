@@ -30,28 +30,30 @@ export async function exportBackup(onProgress = () => {}) {
             const keys = new Set();
             items.forEach(item => Object.keys(item).forEach(k => keys.add(k)));
             
-            // Se nao tiver 'id' primary key em pedidos_itens e acervo_filamentos, tratar:
-            // SQLite precisa de schemas corretos, faremos dinamico e permitimos SQLite gerenciar os tipos.
+            // Usa TEXT para o id para suportar qualquer tipo (timestamp, string, número)
             const colDefs = Array.from(keys).map(k => {
-                if (k === 'id') return 'id INTEGER PRIMARY KEY';
+                if (k === 'id') return '"id" TEXT PRIMARY KEY';
                 return `"${k}" TEXT`;
             }).join(', ');
             
             try {
                 db.exec(`CREATE TABLE "${store}" (${colDefs})`);
-                
-                items.forEach(obj => {
+            } catch (err) {
+                console.warn(`Erro ao criar tabela ${store}:`, err);
+            }
+
+            items.forEach(obj => {
+                try {
                     const cols = Object.keys(obj).map(k => `"${k}"`).join(', ');
                     const vals = Object.values(obj).map(v => {
                         if (v === null || v === undefined) return 'NULL';
-                        if (typeof v === 'number') return v;
                         return `'${String(v).replace(/'/g, "''")}'`;
                     }).join(', ');
-                    db.exec(`INSERT INTO "${store}" (${cols}) VALUES (${vals})`);
-                });
-            } catch (err) {
-                console.warn(`Erro ao exportar tabela ${store}`, err);
-            }
+                    db.exec(`INSERT OR REPLACE INTO "${store}" (${cols}) VALUES (${vals})`);
+                } catch (rowErr) {
+                    console.warn(`Erro ao inserir linha em ${store}:`, rowErr, obj);
+                }
+            });
         }
         processed++;
     }

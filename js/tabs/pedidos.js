@@ -438,7 +438,7 @@ export async function render(container) {
                 const id = isNaN(e.target.dataset.id) ? e.target.dataset.id : Number(e.target.dataset.id);
                 if (confirm('Excluir este pedido finalizado?')) {
                     pedidos = pedidos.filter(x => x.id !== id);
-                    itens = itens.filter(x => x.pedido_id !== id);
+                    itens = itens.filter(x => String(x.pedido_id) !== String(id));
                     await idb.putAll('pedidos_v2', pedidos);
                     await idb.putAll('pedidos_itens', itens);
                     renderFinalizados();
@@ -448,9 +448,9 @@ export async function render(container) {
     }
 
     function openEditModal(pedId) {
-        const p = pedidos.find(x => x.id === pedId);
+        const p = pedidos.find(x => String(x.id) === String(pedId));
         if (!p) return;
-        const pItens = itens.filter(i => i.pedido_id === pedId);
+        const pItens = itens.filter(i => String(i.pedido_id) === String(pedId));
 
         let itensHtml = pItens.map(i => `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; padding:4px; background:#111; border-radius:4px;">
@@ -496,8 +496,8 @@ export async function render(container) {
 
         modalEdicao.querySelectorAll('.ped-remove-item').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const iid = isNaN(e.target.dataset.iid) ? e.target.dataset.iid : Number(e.target.dataset.iid);
-                itens = itens.filter(x => x.id !== iid);
+                const iid = e.target.dataset.iid;
+                itens = itens.filter(x => String(x.id) !== String(iid));
                 await idb.putAll('pedidos_itens', itens);
                 openEditModal(pedId); // reload modal
             });
@@ -506,8 +506,8 @@ export async function render(container) {
         // Auto-save item edits locally before main save
         modalEdicao.querySelectorAll('.edit-item-nome').forEach(inp => {
             inp.addEventListener('change', (e) => {
-                const iid = isNaN(e.target.dataset.iid) ? e.target.dataset.iid : Number(e.target.dataset.iid);
-                const item = itens.find(x => x.id === iid);
+                const iid = e.target.dataset.iid;
+                const item = itens.find(x => String(x.id) === String(iid));
                 if (item) {
                     item.nome_avulso = e.target.value.trim();
                     item.peca = e.target.value.trim(); // keep legacy sync
@@ -517,8 +517,8 @@ export async function render(container) {
 
         modalEdicao.querySelectorAll('.edit-item-custo').forEach(inp => {
             inp.addEventListener('change', (e) => {
-                const iid = isNaN(e.target.dataset.iid) ? e.target.dataset.iid : Number(e.target.dataset.iid);
-                const item = itens.find(x => x.id === iid);
+                const iid = e.target.dataset.iid;
+                const item = itens.find(x => String(x.id) === String(iid));
                 if (item) item.custo_est = parseFloat(e.target.value) || 0;
             });
         });
@@ -529,7 +529,7 @@ export async function render(container) {
             if(n) {
                 itens.push({
                     id: Date.now(),
-                    pedido_id: pedId,
+                    pedido_id: String(pedId),
                     tipo: 'avulso',
                     nome_avulso: n,
                     custo_est: c
@@ -573,7 +573,7 @@ export async function render(container) {
             const colEl = container.querySelector(`#col-${st.replace(/[\/\s]/g, '_')}`);
             if (!colEl) return;
 
-            const pecasDoPedido = itens.filter(i => i.pedido_id === p.id);
+            const pecasDoPedido = itens.filter(i => String(i.pedido_id) === String(p.id));
 
             const card = document.createElement('div');
             card.className = 'kanban-card';
@@ -633,7 +633,7 @@ export async function render(container) {
                 const pedId = isNaN(pedVal) ? pedVal : Number(pedVal);
                 const newStatus = targetBtn.dataset.target;
 
-                const p = pedidos.find(item => item.id === pedId);
+                const p = pedidos.find(item => String(item.id) === String(pedId));
                 if (p) {
                     p.status = newStatus;
                     await idb.putAll('pedidos_v2', pedidos);
@@ -650,8 +650,8 @@ export async function render(container) {
                 const pedId = isNaN(pedVal) ? pedVal : Number(pedVal);
 
                 if (confirm('Tem certeza que deseja excluir este pedido?')) {
-                    pedidos = pedidos.filter(p => p.id !== pedId);
-                    itens = itens.filter(i => i.pedido_id !== pedId);
+                    pedidos = pedidos.filter(p => String(p.id) !== String(pedId));
+                    itens = itens.filter(i => String(i.pedido_id) !== String(pedId));
                     await idb.putAll('pedidos_v2', pedidos);
                     await idb.putAll('pedidos_itens', itens);
                     await renderKanban();

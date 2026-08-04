@@ -72,38 +72,10 @@ export async function render(container) {
             const sprint  = await idb.getAll('producao_pedidos');
             const partes  = await idb.getAll('producao_partes');
 
-            // ── Recuperação automática de pedidos_itens ──────────────
-            // Se pedidos_itens estiver vazio mas producao_partes tem dados,
-            // reconstruímos pedidos_itens a partir das entradas is_produto=true
-            let rawItens = await idb.getAll('pedidos_itens');
-            if (rawItens.length === 0 && partes.length > 0) {
-                const isProduto = pt => pt.is_produto === true || pt.is_produto === 1 || pt.is_produto === '1' || pt.is_produto === 'true';
-                const produtoParts = partes.filter(isProduto);
-                if (produtoParts.length > 0) {
-                    rawItens = produtoParts.map(pt => ({
-                        id: pt.item_id,
-                        pedido_id: pt.pedido_id,
-                        tipo: 'avulso',
-                        nome_avulso: pt.nome || 'Produto',
-                        custo_est: 0
-                    }));
-                    await idb.putAll('pedidos_itens', rawItens);
-                    console.log(`[Sprint] Recuperados ${rawItens.length} itens de producao_partes → pedidos_itens`);
-                }
-            }
-
-            // Normaliza itens: garante que todo item tenha um campo id estável
-            let needsSave = false;
-            const itens = rawItens.map((it, i) => {
-                if (it.id == null || it.id === '') {
-                    needsSave = true;
-                    return { ...it, id: `itm_${it.pedido_id || 'x'}_${i}` };
-                }
-                return it;
-            });
-            if (needsSave) {
-                await idb.putAll('pedidos_itens', itens);
-            }
+            // Sprint usa producao_partes como fonte única de verdade.
+            // Entradas com is_produto=true são os "produtos"; as demais são sub-partes.
+            const iP = pt => pt.is_produto === true || pt.is_produto === 1 ||
+                             pt.is_produto === '1' || pt.is_produto === 'true';
 
             const sel  = document.getElementById('sp-sel');
             const grid = document.getElementById('sp-grid');
@@ -134,49 +106,50 @@ export async function render(container) {
                 const spPedidoId = String(sp.pedido_id);
                 const p = pedidos.find(x => String(x.id) === spPedidoId)
                        || { id: spPedidoId, nome_cliente: 'Pedido #'+spPedidoId, data_entrega: '' };
-                const produtos  = itens.filter(i => String(i.pedido_id) === spPedidoId);
+
+                // Usa pedidos_itens como fonte direta de produtos
+                let rawItens = await idb.getAll('pedidos_itens');
+                // Garante compatibilidade de IDs: se faltar ID em pedidos_itens, já foi arrumado no início do script, mas garantimos
+                const produtos = rawItens.filter(i => String(i.pedido_id) === spPedidoId);
                 const pedPartes = partes.filter(pt => String(pt.pedido_id) === spPedidoId);
+                const normSt    = s => String(s || '').toUpperCase().replace(/[^A-Z]/g, '_').trim();
 
                 let totalConc = 0, totalAll = 0, produtosHTML = '';
 
                 if (!produtos.length) {
-                    produtosHTML = `<div style="color:#555;font-size:.82rem;font-style:italic;padding:4px 0 8px;">Nenhum produto neste pedido.</div>`;
+                    produtosHTML = `<div style="color:#555;font-size:.82rem;font-style:italic;padding:4px 0 8px;">
+                        Nenhum produto neste pedido. Use "+ Novo Produto" abaixo para adicionar.
+                    </div>`;
                 } else {
                     produtos.forEach((item, prodIndex) => {
                         const pieceNum = prodIndex + 1;
+                        
+                        // Nome puxado da aba de pedidos (pedidos_itens)
+                        const nomeProd = esc(item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca || 'Produto');
+                        
+                        // prodEntry em producao_partes guarda apenas os status/obs do produto
                         const iP = pt => pt.is_produto === true || pt.is_produto === 1 || pt.is_produto === '1' || pt.is_produto === 'true';
-                        const prodEntry  = pedPartes.find(pt => String(pt.item_id) === String(item.id) && iP(pt));
-                        // Nome do produto: tenta pedidos_itens primeiro, depois producao_partes, depois sub-parte
-                        const subPartes  = pedPartes.filter(pt => String(pt.item_id) === String(item.id) && !iP(pt));
-                        const nomeProd = esc(
-                            item.nome_avulso || item.nome_custom || item.peca_nome || item.nome_peca ||
-                            (prodEntry && prodEntry.nome) ||
-                            (subPartes[0] && subPartes[0].nome) ||
-                            'Produto'
-                        );
-                        const rawProdStatus = prodEntry ? prodEntry.status : 'A_MODELAR';
-                        const prodStatus = String(rawProdStatus || 'A_MODELAR').toUpperCase().replace(/[^A-Z]/g, '_').trim();
-                        const prodObs    = prodEntry ? (prodEntry.obs || '') : '';
+                        const prodEntry = pedPartes.find(pt => String(pt.item_id) === String(item.id) && iP(pt)) || { id: item.id, status: 'A_MODELAR', obs: '' };
+                        
+                        const prodStatus = normSt(prodEntry.status || 'A_MODELAR');
+                        const prodObs    = prodEntry.obs || '';
                         const prodColor  = sColor(prodStatus);
-                        const normSt     = s => String(s || '').toUpperCase().replace(/[^A-Z]/g, '_').trim();
+                        const subPartes  = pedPartes.filter(pt => !iP(pt) && String(pt.item_id) === String(item.id));
                         const concCount  = (normSt(prodStatus) === 'CONCLUIDO' ? 1 : 0) + subPartes.filter(pt => normSt(pt.status) === 'CONCLUIDO').length;
                         const totCount   = 1 + subPartes.length;
                         totalConc += concCount;
                         totalAll  += totCount;
-                        const itemPct   = Math.round((concCount / totCount) * 100);
-                        const brdColor  = itemPct === 100 ? '#10b981' : '#2e2e2e';
+                        const itemPct  = Math.round((concCount / totCount) * 100);
+                        const brdColor = itemPct === 100 ? '#10b981' : '#2e2e2e';
 
                         let partesHTML = '';
                         subPartes.forEach((pt, ptIndex) => {
-                            const partNum = ptIndex + 1;
-                            const ptNormStatus = String(pt.status || 'A_MODELAR').toUpperCase().replace('_', ' ').trim();
-                            const cor = sColor(ptNormStatus);
+                            const cor = sColor(normSt(pt.status || 'A_MODELAR'));
                             partesHTML += `
                             <div style="background:#1c1c1c;border:1px solid #2a2a2a;border-left:4px solid ${cor};border-radius:6px;padding:9px 11px;margin-bottom:7px;">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                                    <span style="font-weight:700;color:#ddd;font-size:.85rem;">${pieceNum}.${partNum} ${esc(pt.nome)}</span>
-                                    <button onclick="window._sp.removerParte('${pt.id}')" title="Remover parte"
-                                        style="background:none;border:1px solid #444;color:#d64545;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:.72rem;">✕</button>
+                                    <span style="font-weight:700;color:#ddd;font-size:.85rem;">${pieceNum}.${ptIndex+1} ${esc(pt.nome)}</span>
+                                    <button onclick="window._sp.removerParte('${pt.id}')" style="background:none;border:1px solid #444;color:#d64545;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:.72rem;">✕</button>
                                 </div>
                                 ${selHtml(`window._sp.setStatusParte('${pt.id}', this.value)`, pt.status || 'A_MODELAR')}
                                 <textarea onchange="window._sp.setObsParte('${pt.id}', this.value)" placeholder="Obs da parte…"
@@ -187,15 +160,17 @@ export async function render(container) {
                         produtosHTML += `
                         <div style="background:#1a1a1a;border:1px solid ${brdColor};border-radius:8px;padding:12px 14px;margin-bottom:10px;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                <span style="font-weight:700;color:#a78bfa;font-size:.9rem;">${pieceNum}. ${nomeProd}</span>
-                                <div style="display:flex; align-items:center; gap:8px;">
+                                <input value="${nomeProd}" onchange="window._sp.renomearProduto('${item.id}', this.value)"
+                                    style="font-weight:700;color:#a78bfa;font-size:.9rem;background:transparent;border:none;border-bottom:1px dashed #444;flex:1;outline:none;padding:2px 4px;"
+                                    title="Clique para renomear na aba de Pedidos">
+                                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                                     <span style="font-size:.72rem;color:${itemPct===100?'#10b981':'#888'};">${itemPct}%</span>
                                     <button onclick="window._sp.removerProduto('${item.id}')" title="Excluir Produto" style="background:none;border:1px solid #444;color:#d64545;border-radius:4px;cursor:pointer;font-size:.8rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
                                 </div>
                             </div>
                             <div style="background:#1c1c1c;border:1px solid #2a2a2a;border-left:4px solid ${prodColor};border-radius:6px;padding:9px 11px;margin-bottom:10px;">
                                 <div style="font-size:.7rem;color:#777;margin-bottom:4px;font-weight:bold;">STATUS DO PRODUTO</div>
-                                ${selHtml(`window._sp.setStatusProduto('${p.id}','${item.id}', this.value)`, prodStatus)}
+                                ${selHtml(`window._sp.setStatusProduto('${p.id}','${item.id}', this.value)`, prodEntry.status || 'A_MODELAR')}
                                 <textarea onchange="window._sp.setObsProduto('${p.id}','${item.id}', this.value)" placeholder="Obs geral do produto…"
                                     style="width:100%;margin-top:5px;background:#111;border:1px solid #333;color:#bbb;padding:5px 7px;border-radius:4px;font-size:.76rem;resize:vertical;min-height:34px;box-sizing:border-box;font-family:inherit;">${esc(prodObs)}</textarea>
                             </div>
@@ -203,13 +178,12 @@ export async function render(container) {
                             <div style="border-top:1px dashed #252525;padding-top:8px;margin-top:4px;">
                                 <div style="font-size:.7rem;color:#555;margin-bottom:5px;">Adicionar parte:</div>
                                 <div style="display:flex;gap:6px;">
-                                    <input id="inp_${p.id}_${item.id}" type="text" placeholder="Ex: Perna Dir., Bico…"
+                                    <input id="inp_${spPedidoId}_${item.id}" type="text" placeholder="Ex: Perna Dir., Bico…"
                                         style="flex:1;background:#111;border:1px solid #444;color:#eee;padding:6px 9px;border-radius:5px;font-size:.8rem;"
-                                        onkeydown="if(event.key==='Enter')window._sp.addParte('${p.id}','${item.id}')">
-                                    <button onclick="window._sp.addParte('${p.id}','${item.id}')"
+                                        onkeydown="if(event.key==='Enter')window._sp.addSubParte('${spPedidoId}','${item.id}')">
+                                    <button onclick="window._sp.addSubParte('${spPedidoId}','${item.id}')"
                                         style="background:#262626;border:1px solid #444;color:#eee;padding:6px 10px;border-radius:5px;cursor:pointer;font-size:.8rem;white-space:nowrap;">+ Parte</button>
                                 </div>
-                            </div>
                             </div>
                         </div>`;
                     });
@@ -238,21 +212,48 @@ export async function render(container) {
                             </div>
                         </div>
                     </div>
-                    <div>${produtosHTML}</div>`;
+                    <div>${produtosHTML}</div>
+                    <div style="margin-top:10px;">
+                        <button onclick="window._sp.addProduto('${spPedidoId}')" style="width:100%;background:#262626;border:1px dashed #444;color:#aaa;padding:8px;border-radius:6px;cursor:pointer;font-size:.8rem;transition:.2s;" onmouseover="this.style.background='#333';this.style.color='#fff'" onmouseout="this.style.background='#262626';this.style.color='#aaa'">+ Novo Produto</button>
+                    </div>`;
                 grid.appendChild(card);
             }
         },
 
-        async addParte(pedId, itemId) {
-            const inp = document.getElementById(`inp_${pedId}_${itemId}`);
+        async addSubParte(pedId, prodEntryId) {
+            const inp = document.getElementById(`inp_${pedId}_${prodEntryId}`);
             const nome = inp ? inp.value.trim() : '';
             if (!nome) { if (inp) inp.focus(); return; }
             try {
                 let pts = await idb.getAll('producao_partes');
-                pts.push({ id: Date.now() + Math.floor(Math.random()*9999), pedido_id: String(pedId), item_id: String(itemId), is_produto: false, nome, status: 'A_MODELAR', obs: '' });
+                pts.push({ id: Date.now() + Math.floor(Math.random()*9999), pedido_id: String(pedId), item_id: String(prodEntryId), is_produto: false, nome, status: 'A_MODELAR', obs: '' });
                 await idb.putAll('producao_partes', pts);
                 await this._render();
             } catch(e) { alert('Erro ao adicionar parte: ' + e.message); }
+        },
+
+        async addProduto(pedId) {
+            const nome = prompt('Nome do novo produto (aba de pedidos):');
+            if (!nome) return;
+            try {
+                let itens = await idb.getAll('pedidos_itens');
+                const id = Date.now() + Math.floor(Math.random()*9999);
+                itens.push({ id, pedido_id: String(pedId), nome_avulso: nome, tipo: 'avulso', custo_est: 0 });
+                await idb.putAll('pedidos_itens', itens);
+                await this._render();
+            } catch(e) { alert('Erro ao adicionar produto: ' + e.message); }
+        },
+
+        async renomearProduto(itemId, novoNome) {
+            if (!novoNome) return;
+            try {
+                let itens = await idb.getAll('pedidos_itens');
+                const it = itens.find(x => String(x.id) === String(itemId));
+                if (it) { 
+                    it.nome_avulso = novoNome.trim(); 
+                    await idb.putAll('pedidos_itens', itens); 
+                }
+            } catch(e) { console.error(e); }
         },
 
         async removerParte(ptId) {
@@ -265,15 +266,16 @@ export async function render(container) {
         },
 
         async removerProduto(itemId) {
-            if (!confirm('ATENÇÃO: Remover esta peça a excluirá definitivamente do pedido original e da sprint. Continuar?')) return;
+            if (!confirm('ATENÇÃO: Remover este produto o excluirá definitivamente do pedido original e da sprint, junto com suas partes. Continuar?')) return;
             try {
-                // Remove from pedidos_itens
+                // Remove de pedidos_itens
                 let itens = await idb.getAll('pedidos_itens');
                 await idb.putAll('pedidos_itens', itens.filter(x => String(x.id) !== String(itemId)));
                 
-                // Remove from producao_partes
+                // Remove de producao_partes as partes desse produto (e a entry principal dele, se existir)
                 let pts = await idb.getAll('producao_partes');
-                await idb.putAll('producao_partes', pts.filter(x => String(x.item_id) !== String(itemId)));
+                pts = pts.filter(x => String(x.item_id) !== String(itemId));
+                await idb.putAll('producao_partes', pts);
                 
                 await this._render();
             } catch(e) { alert('Erro ao remover produto: ' + e.message); }

@@ -111,7 +111,7 @@ export async function render(container) {
         
         let caminho_foto = null;
         if (idVal) {
-            const idx = _allItems.findIndex(x => x.id === Number(idVal));
+            const idx = _allItems.findIndex(x => String(x.id) === String(idVal));
             if (idx > -1) {
                 caminho_foto = _allItems[idx].caminho_foto;
             }
@@ -143,7 +143,7 @@ export async function render(container) {
         };
 
         if (idVal) {
-            const idx = _allItems.findIndex(x => x.id === novo.id);
+            const idx = _allItems.findIndex(x => String(x.id) === String(novo.id));
             if (idx > -1) {
                 novo.quantidade_rolos = _allItems[idx].quantidade_rolos || 0;
                 _allItems[idx] = novo;
@@ -233,7 +233,7 @@ async function _renderPage(container) {
         btn.addEventListener('click', async (e) => {
             const tgt = e.target.closest('button');
             const filId = parseInt(tgt.dataset.id);
-            const fil = _allItems.find(x => x.id === filId);
+            const fil = _allItems.find(x => String(x.id) === String(filId));
             if (!fil) return;
 
             let qA = parseInt(fil.quantidade_rolos) || 0;
@@ -254,7 +254,7 @@ async function _renderPage(container) {
         btn.dataset.bound = "true";
         btn.addEventListener('click', (e) => {
             const filId = parseInt(e.target.closest('button').dataset.id);
-            const fil = _allItems.find(x => x.id === filId);
+            const fil = _allItems.find(x => String(x.id) === String(filId));
             if (!fil) return;
 
             container.querySelector('#fil-modal-title').textContent = 'Editar Filamento';
@@ -278,7 +278,7 @@ async function _renderPage(container) {
         btn.addEventListener('click', async (e) => {
             const filId = parseInt(e.target.closest('button').dataset.id);
             if (confirm('Tem certeza que deseja excluir este filamento?')) {
-                _allItems = _allItems.filter(x => x.id !== filId);
+                _allItems = _allItems.filter(x => String(x.id) !== String(filId));
                 await idb.putAll('filamentos', _allItems);
                 _resetAndRender(container);
             }

@@ -118,7 +118,7 @@ export async function render(container) {
 
         let caminho_foto = null;
         if (idVal) {
-            const idx = _allItems.findIndex(x => x.id === Number(idVal));
+            const idx = _allItems.findIndex(x => String(x.id) === String(idVal));
             if (idx > -1) {
                 caminho_foto = _allItems[idx].caminho_foto;
             }
@@ -150,7 +150,7 @@ export async function render(container) {
         };
 
         if (idVal) {
-            const idx = _allItems.findIndex(x => x.id === novo.id);
+            const idx = _allItems.findIndex(x => String(x.id) === String(novo.id));
             if (idx > -1) {
                 _allItems[idx] = novo;
             }
@@ -229,7 +229,7 @@ async function _renderPage(container) {
         btn.dataset.bound = "true";
         btn.addEventListener('click', (e) => {
             const itemId = parseInt(e.target.closest('button').dataset.id);
-            const item = _allItems.find(x => x.id === itemId);
+            const item = _allItems.find(x => String(x.id) === String(itemId));
             if (!item) return;
 
             container.querySelector('#almox-modal-title').textContent = 'Editar Insumo';
@@ -254,7 +254,7 @@ async function _renderPage(container) {
         btn.addEventListener('click', async (e) => {
             const itemId = parseInt(e.target.closest('button').dataset.id);
             if (confirm('Tem certeza que deseja excluir este insumo?')) {
-                _allItems = _allItems.filter(x => x.id !== itemId);
+                _allItems = _allItems.filter(x => String(x.id) !== String(itemId));
                 await idb.putAll('ferramentas_insumos', _allItems);
                 _resetAndRender(container);
             }

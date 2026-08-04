@@ -219,7 +219,7 @@ export async function render(container) {
             const pPurga  = parseFloat(r.querySelector('.calc-fil-purga').value) || 0;
             const pTorre  = parseFloat(r.querySelector('.calc-fil-torre').value) || 0;
 
-            const fil = filamentos.find(f => f.id === filId);
+            const fil = filamentos.find(f => String(f.id) === String(filId));
             if (!fil) return;
 
             const pesoIniKg = parseFloat(fil.peso_inicial) || 1.0;

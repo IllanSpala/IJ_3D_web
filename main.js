@@ -79,10 +79,19 @@ ipcMain.handle('write-db', async (event, req) => {
             });
         };
 
+        const createTableFromRows = async (rowsArr) => {
+            if (!rowsArr || rowsArr.length === 0) return;
+            const keySet = new Set();
+            rowsArr.forEach(r => Object.keys(r).forEach(k => keySet.add(k)));
+            const keys = Array.from(keySet);
+            const colDefs = keys.map(k => (k === 'id') ? 'id TEXT PRIMARY KEY' : `"${k}" TEXT`).join(', ');
+            await runQuery(`CREATE TABLE IF NOT EXISTS "${storeName}" (${colDefs})`);
+        };
+
         const createTableFromObj = async (sample) => {
             if (!sample) return;
             const keys = Object.keys(sample);
-            const colDefs = keys.map(k => (k === 'id') ? 'id INTEGER PRIMARY KEY' : `"${k}" TEXT`).join(', ');
+            const colDefs = keys.map(k => (k === 'id') ? 'id TEXT PRIMARY KEY' : `"${k}" TEXT`).join(', ');
             await runQuery(`CREATE TABLE IF NOT EXISTS "${storeName}" (${colDefs})`);
         };
 
@@ -97,21 +106,33 @@ ipcMain.handle('write-db', async (event, req) => {
             try {
                 if (action === 'putAll') {
                     if (rows && rows.length > 0) {
-                        await createTableFromObj(rows[0]);
-                        await runQuery(`DELETE FROM "${storeName}"`); // replace strategy
                         await runQuery('BEGIN TRANSACTION');
                         try {
+                            await runQuery(`DROP TABLE IF EXISTS "${storeName}"`);
+                            await createTableFromRows(rows);
                             for (const r of rows) await insertObj(r);
                             await runQuery('COMMIT');
                         } catch(e) {
                             await runQuery('ROLLBACK');
                             throw e;
                         }
+                    } else if (rows && rows.length === 0) {
+                        await runQuery(`DELETE FROM "${storeName}"`);
                     }
                 } else if (action === 'put') {
                     if (obj) {
                         await createTableFromObj(obj);
-                        await insertObj(obj);
+                        try {
+                            await insertObj(obj);
+                        } catch (err) {
+                            if (err.message.includes('datatype mismatch')) {
+                                await runQuery(`DROP TABLE IF EXISTS "${storeName}"`);
+                                await createTableFromObj(obj);
+                                await insertObj(obj);
+                            } else {
+                                throw err;
+                            }
+                        }
                     }
                 } else if (action === 'clear') {
                     await runQuery(`DELETE FROM "${storeName}"`);
