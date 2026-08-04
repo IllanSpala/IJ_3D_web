@@ -24,9 +24,6 @@ O sistema é dividido em abas modulares, cada uma focada em uma etapa crucial do
 *    **Almoxarifado (Insumos)**
     *   Controle de tintas, colas, parafusos, rolamentos, ferramentas e peças de reposição (nozzles, correias).
     *   Monitoramento de quantidade e alertas visuais para insumos esgotados.
-*    **Acervo**
-    *   Catálogo de modelos 3D prontos que a loja oferece.
-    *   Organização de portfólio para rápida inserção em novos pedidos.
 *    **Financeiro e Precificação**
     *   Calculadora de custo avançada integrada aos filamentos.
     *   Cálculo baseado no peso do fatiador, custo do material, custo de energia (tempo de máquina), taxa de falhas e lucro desejado.
