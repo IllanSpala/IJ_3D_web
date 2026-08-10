@@ -33,11 +33,13 @@ export async function render(container) {
     }
     
     // Despesas from almoxarifado
+    // NOTA: `ultimo_valor` já representa o custo TOTAL da compra (não unitário).
+    // A quantidade `qtd` fica apenas na string descritiva — não é usada em cálculos.
     for (const a of almox) {
         if (a.ultimo_valor) {
-            let qtd = parseInt(a.quantidade);
-            if (isNaN(qtd)) qtd = 1;
-            allEntries.push({ date: a.data || null, desc: `Insumo/Ferramenta: ${a.nome} x${qtd}`, value: -(a.ultimo_valor * qtd), type: 'despesa', category: 'insumos' });
+            const qtdRaw = parseInt(a.quantidade);
+            const qtdLabel = isNaN(qtdRaw) ? '' : ` x${qtdRaw}`;
+            allEntries.push({ date: a.data || null, desc: `Insumo/Ferramenta: ${a.nome}${qtdLabel}`, value: -a.ultimo_valor, type: 'despesa', category: 'insumos' });
         }
     }
 
