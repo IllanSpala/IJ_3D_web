@@ -21,6 +21,52 @@ function parsePeso(val) {
     return parseFloat(String(val).replace(',', '.')) || 0;
 }
 
+/**
+ * Converte uma string de tempo de impressão ("30:15", "01:00", "30", etc.)
+ * em um objeto com horas e minutos numéricos.
+ */
+function parseDuracao(val) {
+    if (!val) return { h: 1, m: 0 };
+    const str = String(val).trim();
+    if (str.includes(':')) {
+        const parts = str.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        return {
+            h: isNaN(h) ? 1 : Math.max(0, h),
+            m: isNaN(m) ? 0 : Math.max(0, Math.min(59, m))
+        };
+    }
+    const num = parseFloat(str.replace(',', '.'));
+    if (!isNaN(num)) {
+        const h = Math.floor(num);
+        const m = Math.round((num - h) * 60);
+        return { h: Math.max(0, h), m: Math.max(0, Math.min(59, m)) };
+    }
+    return { h: 1, m: 0 };
+}
+
+/**
+ * Formata valores numéricos de horas e minutos em string "HH:MM".
+ */
+function formatDuracao(hVal, mVal) {
+    let hours = parseInt(hVal, 10);
+    let mins = parseInt(mVal, 10);
+    if (isNaN(hours)) hours = 0;
+    if (isNaN(mins)) mins = 0;
+
+    if (mins >= 60) {
+        hours += Math.floor(mins / 60);
+        mins = mins % 60;
+    }
+    if (hours < 0) hours = 0;
+    if (mins < 0) mins = 0;
+
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(mins).padStart(2, '0');
+    return `${hh}:${mm}`;
+}
+
 export async function render(container) {
     _allItems    = await idb.getAll('hist_impressoes');
     _allFilRows  = await idb.getAll('hist_filamentos');
@@ -74,7 +120,21 @@ export async function render(container) {
             <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
                 <label>Data <input type="date" id="hist-data" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label>Nome da Peça / Pedido <input type="text" id="hist-nome" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
-                <label>Duração (hh:mm) <input type="time" id="hist-duracao" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
+                <div>
+                    <label style="display:block; margin-bottom:4px; font-size:0.9rem; color:#eee;">Duração da Impressão</label>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <div style="flex:1; display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="hist-duracao-h" min="0" max="999" placeholder="00" value="01"
+                                   style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px 8px; border-radius:4px;">
+                            <span style="color:#aaa; font-size:0.85rem; font-weight:600;">h</span>
+                        </div>
+                        <div style="flex:1; display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="hist-duracao-m" min="0" max="59" placeholder="00" value="00"
+                                   style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px 8px; border-radius:4px;">
+                            <span style="color:#aaa; font-size:0.85rem; font-weight:600;">min</span>
+                        </div>
+                    </div>
+                </div>
                 <label>Status
                     <select id="hist-status" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;">
                         <option value="Sucesso">Sucesso</option>
@@ -136,10 +196,11 @@ export async function render(container) {
     function openModalAdd() {
         modalTitle.textContent = 'Adicionar Registro Manual';
         editingIdEl.value = '';
-        container.querySelector('#hist-data').value    = new Date().toISOString().split('T')[0];
-        container.querySelector('#hist-nome').value    = '';
-        container.querySelector('#hist-duracao').value = '01:00';
-        container.querySelector('#hist-status').value  = 'Sucesso';
+        container.querySelector('#hist-data').value      = new Date().toISOString().split('T')[0];
+        container.querySelector('#hist-nome').value      = '';
+        container.querySelector('#hist-duracao-h').value = '01';
+        container.querySelector('#hist-duracao-m').value = '00';
+        container.querySelector('#hist-status').value    = 'Sucesso';
         currentFilamentos = [];
         renderFilsForm();
         overlay.style.display = 'block';
@@ -152,8 +213,11 @@ export async function render(container) {
         editingIdEl.value = h.id;
         container.querySelector('#hist-data').value    = h.data_impressao || '';
         container.querySelector('#hist-nome').value    = h.nome_peca      || '';
-        container.querySelector('#hist-duracao').value = h.tempo_impressao || '01:00';
-        container.querySelector('#hist-status').value  = h.status          || 'Sucesso';
+        
+        const dur = parseDuracao(h.tempo_impressao);
+        container.querySelector('#hist-duracao-h').value = String(dur.h).padStart(2, '0');
+        container.querySelector('#hist-duracao-m').value = String(dur.m).padStart(2, '0');
+        container.querySelector('#hist-status').value    = h.status          || 'Sucesso';
 
         // Carrega os filamentos já vinculados a este registro
         currentFilamentos = (h._filamentos || []).map(f => ({
@@ -205,11 +269,15 @@ export async function render(container) {
         // ID: preserva o existente em edição; gera novo timestamp para inclusão
         const h_id = isEdit ? (isNaN(Number(editingId)) ? editingId : Number(editingId)) : Date.now();
 
+        const durH = container.querySelector('#hist-duracao-h').value;
+        const durM = container.querySelector('#hist-duracao-m').value;
+        const tempoFormatted = formatDuracao(durH, durM);
+
         const registro = {
             id:             h_id,
             data_impressao: container.querySelector('#hist-data').value,
             nome_peca:      container.querySelector('#hist-nome').value.trim() || 'Sem nome',
-            tempo_impressao:container.querySelector('#hist-duracao').value,
+            tempo_impressao:tempoFormatted,
             status:         container.querySelector('#hist-status').value
         };
 
