@@ -111,6 +111,9 @@ export async function render(container) {
             <div class="load-more-container" id="hist-lm"></div>
         </div>
 
+        <!-- Dashboard Analítico (Métricas à esquerda e Gráfico por Cor à direita) -->
+        <div id="hist-analytics-root" style="margin-top:24px;"></div>
+
         <!-- Modal CRUD -->
         <div id="hist-modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:800;"></div>
         <div id="hist-modal" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%); background:#1e1e1e; padding:20px; border-radius:12px; border:1px solid #333; z-index:1000; min-width:450px; max-height:80vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
@@ -423,6 +426,281 @@ function _page(c) {
         lm.innerHTML = '';
         if (!f.length) tb.innerHTML = `<tr><td colspan="6" class="empty-state"><span class="empty-state-icon">🗂</span>Nenhum registro.</td></tr>`;
     }
+
+    renderAnalytics(c);
 }
+
+/**
+ * Normaliza o nome da cor e atribui uma cor hexadecimal representativa.
+ * Trata variações de nome (ex: "cinza", "grafite", "cinza/grafite" -> "Cinza / Grafite").
+ */
+function getCanonicalColor(colorStr) {
+    if (!colorStr) return { name: 'Outros', hex: '#64748b' };
+    const raw = colorStr.trim();
+    const c = raw.toLowerCase();
+
+    if (c.includes('cinza') || c.includes('grafite') || c.includes('gray') || c.includes('grey')) {
+        return { name: 'Cinza / Grafite', hex: '#6e7681' };
+    }
+    if (c.includes('preto') || c.includes('black')) {
+        return { name: 'Preto', hex: '#374151' };
+    }
+    if (c.includes('branco') || c.includes('white')) {
+        return { name: 'Branco', hex: '#e2e8f0' };
+    }
+    if (c.includes('vermelho') || c.includes('red') || c.includes('carmim')) {
+        return { name: 'Vermelho', hex: '#ef4444' };
+    }
+    if (c.includes('azul') || c.includes('blue')) {
+        return { name: 'Azul', hex: '#3b82f6' };
+    }
+    if (c.includes('amarelo') || c.includes('yellow')) {
+        return { name: 'Amarelo', hex: '#eab308' };
+    }
+    if (c.includes('verde') || c.includes('green')) {
+        return { name: 'Verde', hex: '#22c55e' };
+    }
+    if (c.includes('laranja') || c.includes('orange')) {
+        return { name: 'Laranja', hex: '#f97316' };
+    }
+    if (c.includes('roxo') || c.includes('purple') || c.includes('violeta')) {
+        return { name: 'Roxo', hex: '#a855f7' };
+    }
+    if (c.includes('rosa') || c.includes('pink')) {
+        return { name: 'Rosa', hex: '#ec4899' };
+    }
+    if (c.includes('marrom') || c.includes('brown')) {
+        return { name: 'Marrom', hex: '#854d0e' };
+    }
+    if (c.includes('dourado') || c.includes('ouro') || c.includes('gold')) {
+        return { name: 'Dourado', hex: '#d97706' };
+    }
+    if (c.includes('prata') || c.includes('silver')) {
+        return { name: 'Prata', hex: '#94a3b8' };
+    }
+    if (c.includes('transparente') || c.includes('natural') || c.includes('clear')) {
+        return { name: 'Transparente / Natural', hex: '#38bdf8' };
+    }
+
+    const capName = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return { name: capName, hex: '#64748b' };
+}
+
+/**
+ * Renderiza o painel analítico com métricas à esquerda e gráfico de consumo por cor à direita.
+ */
+function renderAnalytics(container) {
+    const rootEl = container.querySelector('#hist-analytics-root');
+    if (!rootEl) return;
+
+    /* ── 1. Tempo total de impressão da máquina ── */
+    let totalH = 0, totalM = 0;
+    for (const item of _allItems) {
+        const dur = parseDuracao(item.tempo_impressao);
+        totalH += dur.h;
+        totalM += dur.m;
+    }
+    totalH += Math.floor(totalM / 60);
+    totalM = totalM % 60;
+    const tempoTotalStr = `${totalH}h ${String(totalM).padStart(2, '0')}min`;
+
+    /* ── 2. Total de filamento gasto em kg (e gramas) ── */
+    let grandTotalGrams = 0;
+    for (const f of _allFilRows) {
+        grandTotalGrams += (parseFloat(f.peso_modelo_g) || 0) + (parseFloat(f.peso_purga_g) || 0);
+    }
+    const grandTotalKg = (grandTotalGrams / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+    /* ── 3. Análise por cor (catálogo completo + histórico) ── */
+    const filMap = {};
+    for (const f of _todosFils) filMap[f.id] = f;
+
+    const colorsMap = {};
+
+    // Cadastra todas as cores do catálogo de filamentos (inclusive os esgotados / sem consumo)
+    for (const tf of _todosFils) {
+        if (tf.cor) {
+            const { name, hex } = getCanonicalColor(tf.cor);
+            if (!colorsMap[name]) {
+                colorsMap[name] = { name, hex, totalGrams: 0, materials: {} };
+            }
+        }
+    }
+
+    // Processa o consumo real de cada filamento registrado no histórico
+    for (const f of _allFilRows) {
+        const realFil = filMap[f.filamento_id] || {};
+        const corName = f.cor || realFil.cor || '';
+        const matName = (f.material || realFil.material || 'PLA').trim().toUpperCase();
+        const weightG = (parseFloat(f.peso_modelo_g) || 0) + (parseFloat(f.peso_purga_g) || 0);
+
+        const { name, hex } = getCanonicalColor(corName);
+        if (!colorsMap[name]) {
+            colorsMap[name] = { name, hex, totalGrams: 0, materials: {} };
+        }
+
+        colorsMap[name].totalGrams += weightG;
+        colorsMap[name].materials[matName] = (colorsMap[name].materials[matName] || 0) + weightG;
+    }
+
+    const colorsList = Object.values(colorsMap);
+    colorsList.sort((a, b) => b.totalGrams - a.totalGrams || a.name.localeCompare(b.name));
+
+    const maxGrams = colorsList.length ? Math.max(...colorsList.map(c => c.totalGrams)) : 1;
+
+    let chartBarsHTML = '';
+    if (colorsList.length === 0) {
+        chartBarsHTML = '<div style="color:#666; font-style:italic; padding:20px; text-align:center;">Nenhuma cor de filamento cadastrada no banco de dados.</div>';
+    } else {
+        chartBarsHTML = colorsList.map((c, idx) => {
+            const percentMax = maxGrams > 0 ? (c.totalGrams / maxGrams) * 100 : 0;
+            const percentTotal = grandTotalGrams > 0 ? ((c.totalGrams / grandTotalGrams) * 100).toFixed(1) : '0.0';
+            const kgStr = (c.totalGrams / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+            const matEntries = Object.entries(c.materials)
+                .filter(([_, g]) => g > 0)
+                .sort((a, b) => b[1] - a[1]);
+
+            let matHTML = '';
+            if (matEntries.length === 0) {
+                matHTML = '<div style="color:#888; font-style:italic;">Nenhum consumo registrado</div>';
+            } else {
+                matHTML = matEntries.map(([mat, g]) => {
+                    const matKg = (g / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+                    const gStr = g.toLocaleString('pt-BR');
+                    return `
+                        <div style="display:flex; justify-content:space-between; gap:16px; margin-top:3px;">
+                            <span style="color:#00a2ff; font-weight:600;">🔹 ${escapeHtml(mat)}:</span>
+                            <span style="color:#fff; font-weight:700;">${matKg} kg <small style="color:#aaa;">(${gStr}g)</small></span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            const tooltipPosClass = idx === 0 ? 'tooltip-down' : 'tooltip-up';
+
+            return `
+                <div class="color-bar-row ${tooltipPosClass}" style="position:relative; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:0.85rem;">
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:600; color:#eee;">
+                            <span style="width:12px; height:12px; border-radius:50%; background:${c.hex}; display:inline-block; box-shadow:0 0 8px ${c.hex}80;"></span>
+                            <span>${escapeHtml(c.name)}</span>
+                        </div>
+                        <div style="font-size:0.82rem; color:#aaa;">
+                            <strong style="color:#fff;">${kgStr} kg</strong> <span style="color:#666;">(${c.totalGrams.toLocaleString('pt-BR')}g)</span>
+                            ${grandTotalGrams > 0 ? `<span style="color:#00a2ff; margin-left:6px; font-weight:600;">• ${percentTotal}%</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div style="width:100%; height:20px; background:#111; border-radius:6px; border:1px solid #333; overflow:hidden; cursor:pointer;">
+                        <div style="height:100%; width:${c.totalGrams > 0 ? Math.max(percentMax, 2) : 0}%; background:linear-gradient(90deg, ${c.hex}aa, ${c.hex}); border-radius:5px; transition:width 0.4s ease;"></div>
+                    </div>
+
+                    <!-- Tooltip Hover Popover -->
+                    <div class="color-hover-tooltip">
+                        <div style="font-weight:700; color:#fff; border-bottom:1px solid rgba(255,255,255,0.12); padding-bottom:6px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                            <span style="width:10px; height:10px; border-radius:50%; background:${c.hex}; display:inline-block;"></span>
+                            🎨 ${escapeHtml(c.name)} — Detalhamento
+                        </div>
+                        <div style="font-size:0.82rem; color:#eee; margin-bottom:8px;">
+                            <strong>Consumo Total:</strong> ${kgStr} kg <span style="color:#aaa;">(${c.totalGrams.toLocaleString('pt-BR')}g)</span>
+                        </div>
+                        <div style="font-size:0.78rem; font-weight:700; color:#aaa; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">
+                            Consumo por Material:
+                        </div>
+                        <div style="font-size:0.82rem;">
+                            ${matHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    rootEl.innerHTML = `
+        <style>
+            .color-bar-row {
+                position: relative;
+            }
+            .color-bar-row .color-hover-tooltip {
+                display: none;
+                position: absolute;
+                left: 20px;
+                background: rgba(18, 18, 24, 0.96);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+                border-radius: 10px;
+                padding: 14px 16px;
+                min-width: 270px;
+                z-index: 9999;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.2s ease, transform 0.2s ease;
+            }
+            .color-bar-row.tooltip-up .color-hover-tooltip {
+                bottom: calc(100% + 6px);
+                transform: translateY(4px);
+            }
+            .color-bar-row.tooltip-down .color-hover-tooltip {
+                top: calc(100% + 6px);
+                transform: translateY(-4px);
+            }
+            .color-bar-row:hover .color-hover-tooltip {
+                display: block;
+                opacity: 1;
+                transform: translateY(0);
+            }
+            .color-bar-row:hover > div:first-child {
+                filter: brightness(1.15);
+            }
+        </style>
+
+        <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:stretch;">
+            <!-- CANTO ESQUERDO: MÉTRICAS TOTAIS -->
+            <div style="flex:1; min-width:280px; max-width:380px; display:flex; flex-direction:column; gap:16px;">
+                <!-- 1. Tempo Total de Impressão -->
+                <div style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                    <div style="font-size:0.82rem; color:#aaa; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                        <span>⏱️ Tempo Total de Impressão</span>
+                    </div>
+                    <div style="font-size:2.1rem; font-weight:800; color:#00a2ff; text-shadow:0 0 12px rgba(0, 162, 255, 0.3);">
+                        ${tempoTotalStr}
+                    </div>
+                    <div style="font-size:0.78rem; color:#777; margin-top:6px;">Total de horas de funcionamento da máquina</div>
+                </div>
+
+                <!-- 2. Filamento Total Gasto -->
+                <div style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                    <div style="font-size:0.82rem; color:#aaa; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                        <span>⚖️ Filamento Total Gasto</span>
+                    </div>
+                    <div style="font-size:2.1rem; font-weight:800; color:#4ade80; text-shadow:0 0 12px rgba(74, 222, 128, 0.3);">
+                        ${grandTotalKg} kg
+                    </div>
+                    <div style="font-size:0.82rem; color:#aaa; font-weight:600; margin-top:2px;">
+                        (${grandTotalGrams.toLocaleString('pt-BR')} gramas)
+                    </div>
+                    <div style="font-size:0.78rem; color:#777; margin-top:6px;">Massa total de material consumido (peças + suportes)</div>
+                </div>
+            </div>
+
+            <!-- CANTO DIREITO: GRÁFICO DE CONSUMO POR COR -->
+            <div style="flex:2; min-width:340px; background:#1e1e1e; border:1px solid #333; border-radius:12px; padding:20px; display:flex; flex-direction:column;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #2a2a2a; padding-bottom:10px;">
+                    <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin:0; display:flex; align-items:center; gap:8px;">
+                        📊 Consumo de Filamento por Cor
+                    </h3>
+                    <span style="font-size:0.78rem; color:#888;">Passe o mouse para detalhar por material (PLA, PETG)</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px; flex:1;">
+                    ${chartBarsHTML}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 
 
