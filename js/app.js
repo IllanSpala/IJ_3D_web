@@ -73,7 +73,7 @@ function showBarrier() {
 }
 
 async function handleFile(file, bar, label) {
-    if (!file.name.endsWith('.zip')) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
         label.textContent = 'Formato inválido. Selecione um .zip';
         label.style.color = '#f87171';
         return;
@@ -109,17 +109,20 @@ function showApp() {
 }
 
 function checkBackupStatus() {
-    const lastBackup = localStorage.getItem('lastBackupDate');
+    const lastBackup   = localStorage.getItem('lastBackupDate');
+    const lastDismiss  = localStorage.getItem('backupToastDismissed');
     const now = Date.now();
-    const isOld = !lastBackup || (now - parseInt(lastBackup)) > (24 * 60 * 60 * 1000); // 24 hours
+    const isOld        = !lastBackup  || (now - parseInt(lastBackup))  > (24 * 60 * 60 * 1000);
+    const isDismissed  = lastDismiss  && (now - parseInt(lastDismiss)) < (24 * 60 * 60 * 1000);
 
-    if (isOld) {
+    if (isOld && !isDismissed) {
         const toast = document.createElement('div');
         toast.id = 'backup-toast';
         toast.style = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(220,38,38,0.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;padding:12px 24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);display:flex;align-items:center;gap:16px;z-index:9000;font-family:sans-serif;font-weight:600;border:1px solid rgba(255,255,255,0.2);';
         toast.innerHTML = `
             <span>⚠️ Atenção: Seu último backup tem mais de 24 horas. Exporte os dados agora para evitar perda!</span>
             <button style="background:#fff;color:#dc2626;border:none;padding:6px 14px;border-radius:6px;font-weight:bold;cursor:pointer;font-size:0.85rem;box-shadow:0 2px 8px rgba(0,0,0,0.2);" onclick="document.getElementById('btn-export-backup').click();">Exportar Agora</button>
+            <button title="Fechar" style="background:rgba(255,255,255,0.15);color:#fff;border:none;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1rem;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;" onclick="localStorage.setItem('backupToastDismissed', Date.now()); this.closest('#backup-toast').remove();">✕</button>
         `;
         document.body.appendChild(toast);
     }
