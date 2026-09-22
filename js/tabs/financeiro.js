@@ -242,16 +242,7 @@ export async function render(container) {
         viewer.className = 'calc-image-viewer-backdrop';
         viewer.innerHTML = `
             <div class="calc-image-viewer" role="dialog" aria-modal="true" aria-label="Orçamento ampliado de ${escapeHtml(record.nome_produto || 'produto')}">
-                <div class="calc-image-viewer-header">
-                    <div>
-                        <h3>${escapeHtml(record.nome_produto || 'Sem nome')}</h3>
-                        <span>${Number(record.quantidade) || 1} unid. · ${new Date(record.criado_em).toLocaleDateString('pt-BR')}</span>
-                    </div>
-                    <button class="calc-image-viewer-close" type="button" aria-label="Fechar imagem ampliada">✕</button>
-                </div>
-                <div class="calc-image-viewer-scroll">
-                    <img src="${escapeHtml(url)}" alt="Orçamento completo de ${escapeHtml(record.nome_produto || '')}">
-                </div>
+                <img src="${escapeHtml(url)}" alt="Orçamento completo de ${escapeHtml(record.nome_produto || '')}">
             </div>`;
         // Mantém o visualizador na raiz do documento para que nenhum contexto
         // de empilhamento da aba/galeria consiga colocá-lo por trás do modal.
@@ -265,10 +256,10 @@ export async function render(container) {
             setTimeout(() => viewer.remove(), 250);
         };
         const onViewerKeydown = (event) => { if (event.key === 'Escape') closeViewer(); };
-        viewer.querySelector('.calc-image-viewer-close').addEventListener('click', closeViewer);
         viewer.addEventListener('click', event => { if (event.target === viewer) closeViewer(); });
         document.addEventListener('keydown', onViewerKeydown);
-        viewer.querySelector('.calc-image-viewer-close').focus();
+        viewer.tabIndex = -1;
+        viewer.focus();
     }
 
     async function showGallery() {
@@ -305,7 +296,7 @@ export async function render(container) {
                 imageWrap.tabIndex = 0;
                 imageWrap.setAttribute('role', 'button');
                 imageWrap.setAttribute('aria-label', `Ampliar orçamento de ${record.nome_produto || 'produto'}`);
-                imageWrap.addEventListener('click', () => showImageViewer(record, url));
+                imageWrap.addEventListener('dblclick', () => showImageViewer(record, url));
                 imageWrap.addEventListener('keydown', event => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
