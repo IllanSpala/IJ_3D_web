@@ -54,12 +54,12 @@ function showBarrier() {
     const bar    = document.getElementById('progress-fill');
     const label  = document.getElementById('progress-label');
 
-    // Click to browse
-    zone.addEventListener('click', () => input.click());
-    input.addEventListener('click', (e) => e.stopPropagation()); // Previne loop infinito
-    
+    // O campo de arquivo cobre a área de upload de forma transparente. Assim,
+    // o clique é uma ativação nativa (inclusive no Electron), sem input.click().
     input.addEventListener('change', (e) => {
-        if (e.target.files.length) handleFile(e.target.files[0], bar, label);
+        if (e.target.files.length) {
+            handleFile(e.target.files[0], bar, label);
+        }
     });
 
     // Drag-and-drop
