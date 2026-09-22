@@ -237,7 +237,7 @@ export async function render(container) {
     }
 
     function showImageViewer(record, url) {
-        if (!url || modalRoot.querySelector('.calc-image-viewer-backdrop')) return;
+        if (!url || document.querySelector('.calc-image-viewer-backdrop')) return;
         const viewer = document.createElement('div');
         viewer.className = 'calc-image-viewer-backdrop';
         viewer.innerHTML = `
@@ -253,11 +253,16 @@ export async function render(container) {
                     <img src="${escapeHtml(url)}" alt="Orçamento completo de ${escapeHtml(record.nome_produto || '')}">
                 </div>
             </div>`;
-        modalRoot.appendChild(viewer);
+        // Mantém o visualizador na raiz do documento para que nenhum contexto
+        // de empilhamento da aba/galeria consiga colocá-lo por trás do modal.
+        document.body.appendChild(viewer);
+        requestAnimationFrame(() => viewer.classList.add('is-open'));
 
         const closeViewer = () => {
             document.removeEventListener('keydown', onViewerKeydown);
-            viewer.remove();
+            viewer.classList.remove('is-open');
+            viewer.addEventListener('transitionend', () => viewer.remove(), { once: true });
+            setTimeout(() => viewer.remove(), 250);
         };
         const onViewerKeydown = (event) => { if (event.key === 'Escape') closeViewer(); };
         viewer.querySelector('.calc-image-viewer-close').addEventListener('click', closeViewer);
@@ -295,12 +300,12 @@ export async function render(container) {
             const card = modalRoot.querySelector(`.calc-saved-card[data-id="${CSS.escape(String(record.id))}"]`);
             const url = await idb.resolveMediaUrl(record.media_path);
             const imageWrap = card.querySelector('.calc-saved-image');
-            imageWrap.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Orçamento de ${escapeHtml(record.nome_produto || '')}"><span class="calc-image-expand-hint">Duplo clique para ampliar</span>` : '<div class="calc-image-loader">Imagem indisponível</div>';
+            imageWrap.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Orçamento de ${escapeHtml(record.nome_produto || '')}">` : '<div class="calc-image-loader">Imagem indisponível</div>';
             if (url) {
                 imageWrap.tabIndex = 0;
                 imageWrap.setAttribute('role', 'button');
                 imageWrap.setAttribute('aria-label', `Ampliar orçamento de ${record.nome_produto || 'produto'}`);
-                imageWrap.addEventListener('dblclick', () => showImageViewer(record, url));
+                imageWrap.addEventListener('click', () => showImageViewer(record, url));
                 imageWrap.addEventListener('keydown', event => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();

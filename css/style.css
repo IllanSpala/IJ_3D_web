@@ -285,9 +285,8 @@ a:hover { text-decoration: underline; }
 .calc-saved-image { position: relative; height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #101010; }
 .calc-saved-image[role="button"] { cursor: zoom-in; outline: none; }
 .calc-saved-image[role="button"]:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
-.calc-saved-image img { width: 100%; height: 100%; object-fit: contain; }
-.calc-image-expand-hint { position: absolute; right: 9px; bottom: 9px; padding: 5px 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; background: rgba(0,0,0,.72); color: #ccc; font-size: .66rem; opacity: 0; transform: translateY(3px); transition: .18s ease; pointer-events: none; }
-.calc-saved-image:hover .calc-image-expand-hint, .calc-saved-image:focus-visible .calc-image-expand-hint { opacity: 1; transform: translateY(0); }
+.calc-saved-image img { width: 100%; height: 100%; object-fit: contain; transition: transform .22s ease, filter .22s ease; }
+.calc-saved-image[role="button"]:hover img { transform: scale(1.025); filter: brightness(1.08); }
 .calc-image-loader { color: #666; font-size: .78rem; }
 .calc-saved-info { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 14px; }
 .calc-saved-info h3 { max-width: 185px; margin-bottom: 3px; overflow: hidden; color: #eee; font-size: .9rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -301,8 +300,10 @@ a:hover { text-decoration: underline; }
 .calc-gallery-empty h3 { margin-bottom: 5px; color: #aaa; }
 .calc-gallery-empty p { max-width: 390px; }
 
-.calc-image-viewer-backdrop { position: fixed; inset: 0; z-index: 10020; display: flex; align-items: center; justify-content: center; padding: 3vh 3vw; background: rgba(0,0,0,.92); backdrop-filter: blur(7px); }
-.calc-image-viewer { display: flex; width: min(1100px, 94vw); height: 94vh; flex-direction: column; overflow: hidden; border: 1px solid #3b3b3b; border-radius: 14px; background: #151515; box-shadow: 0 30px 100px rgba(0,0,0,.8); }
+.calc-image-viewer-backdrop { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center; padding: 3vh 3vw; background: rgba(0,0,0,0); backdrop-filter: blur(0); opacity: 0; transition: opacity .2s ease, background .2s ease, backdrop-filter .2s ease; }
+.calc-image-viewer-backdrop.is-open { background: rgba(0,0,0,.92); backdrop-filter: blur(7px); opacity: 1; }
+.calc-image-viewer { display: flex; width: min(1100px, 94vw); height: 94vh; flex-direction: column; overflow: hidden; border: 1px solid #3b3b3b; border-radius: 14px; background: #151515; box-shadow: 0 30px 100px rgba(0,0,0,.8); transform: scale(.94) translateY(12px); transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+.calc-image-viewer-backdrop.is-open .calc-image-viewer { transform: scale(1) translateY(0); }
 .calc-image-viewer-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 18px; border-bottom: 1px solid #333; background: #202020; }
 .calc-image-viewer-header h3 { margin-bottom: 2px; color: #f0f0f0; font-size: .95rem; }
 .calc-image-viewer-header span { color: #888; font-size: .72rem; }
