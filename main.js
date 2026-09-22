@@ -164,3 +164,30 @@ ipcMain.handle('save-media', async (event, arrayBuffer, relativePath) => {
         return { success: false, error: err.message };
     }
 });
+
+ipcMain.handle('delete-media', async (event, relativePath) => {
+    try {
+        const mediaRoot = path.join(app.getPath('documents'), 'IJ3D_Data');
+        const fullPath = path.resolve(mediaRoot, relativePath);
+        if (!fullPath.startsWith(path.resolve(mediaRoot) + path.sep)) {
+            throw new Error('Caminho de mídia inválido.');
+        }
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        return { success: true };
+    } catch (err) {
+        console.error('Media delete error:', err);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('capture-region', async (event, rect) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) throw new Error('Janela não encontrada.');
+    const image = await win.webContents.capturePage({
+        x: Math.max(0, Math.round(Number(rect.x) || 0)),
+        y: Math.max(0, Math.round(Number(rect.y) || 0)),
+        width: Math.max(1, Math.round(Number(rect.width) || 1)),
+        height: Math.max(1, Math.round(Number(rect.height) || 1))
+    });
+    return image.toPNG();
+});

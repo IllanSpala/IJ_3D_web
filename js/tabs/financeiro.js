@@ -5,6 +5,62 @@
 import * as idb from '../db.js';
 import { formatBRL, TAXAS_PLATAFORMA, escapeHtml } from '../utils.js';
 
+const folderIcon = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>`;
+const cameraIcon = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 13 3h-2L9.5 5H6a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3z"/><circle cx="12" cy="12.5" r="3.5"/></svg>`;
+
+function inlineComputedStyles(source, clone) {
+    const sourceChildren = source.children;
+    const cloneChildren = clone.children;
+    const computed = getComputedStyle(source);
+    for (const property of computed) clone.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
+    clone.querySelectorAll('[data-capture-ignore]').forEach(el => el.remove());
+    for (let i = 0; i < sourceChildren.length; i++) {
+        if (sourceChildren[i].hasAttribute('data-capture-ignore') || !cloneChildren[i]) continue;
+        inlineComputedStyles(sourceChildren[i], cloneChildren[i]);
+    }
+}
+
+async function captureElement(element) {
+    await document.fonts?.ready;
+    const ignored = [...element.querySelectorAll('[data-capture-ignore]')];
+    const previousDisplays = ignored.map(el => el.style.display);
+    ignored.forEach(el => { el.style.display = 'none'; });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {
+        const rect = element.getBoundingClientRect();
+        if (window.electron?.captureRegion) {
+            const png = await window.electron.captureRegion({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+            return new Blob([png], { type: 'image/png' });
+        }
+
+        const clone = element.cloneNode(true);
+        inlineComputedStyles(element, clone);
+        clone.style.margin = '0';
+        clone.style.width = `${rect.width}px`;
+        clone.style.height = `${rect.height}px`;
+        const serialized = new XMLSerializer().serializeToString(clone);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${serialized}</div></foreignObject></svg>`;
+        const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+        const img = new Image();
+        img.src = svgUrl;
+        try {
+            await img.decode();
+            const scale = Math.max(2, window.devicePixelRatio || 1);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(rect.width * scale);
+            canvas.height = Math.round(rect.height * scale);
+            const ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0, rect.width, rect.height);
+            return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Não foi possível gerar a imagem.')), 'image/png'));
+        } finally {
+            URL.revokeObjectURL(svgUrl);
+        }
+    } finally {
+        ignored.forEach((el, index) => { el.style.display = previousDisplays[index]; });
+    }
+}
+
 export async function render(container) {
     const config = (await idb.getAll('configuracoes'))[0] || {};
     const todosFilamentos = await idb.getAll('filamentos');
@@ -20,8 +76,11 @@ export async function render(container) {
 
     container.innerHTML = `
         <div class="card" style="width:100%; height:100%; display:flex; flex-direction:column;">
-            <div class="card-header" style="display:flex; align-items:center; justify-content:center; gap:8px;">
-                <span>🧮</span> Calculadora de Impressão 3D
+            <div class="card-header calc-main-header">
+                <span class="calc-header-title"><span>🧮</span> Calculadora de Impressão 3D</span>
+                <button class="calc-folder-btn" id="calc-open-gallery" title="Abrir orçamentos salvos" aria-label="Abrir orçamentos salvos">
+                    ${folderIcon}<span id="calc-gallery-count" class="calc-gallery-count" hidden></span>
+                </button>
             </div>
             
             <div class="calc-layout" style="display:grid; grid-template-columns: minmax(300px, 1.2fr) minmax(250px, 1fr) minmax(350px, 1.5fr); gap:24px; flex:1; align-items:start;">
@@ -113,10 +172,140 @@ export async function render(container) {
                 </div>
             </div>
         </div>
+        <div id="calc-modal-root"></div>
     `;
 
     const filamentosList = container.querySelector('#calc-filamentos-list');
     const custosExtraList = container.querySelector('#calc-custos-extra-list');
+    const modalRoot = container.querySelector('#calc-modal-root');
+    let lastCalculatedQty = 1;
+
+    async function refreshGalleryCount() {
+        const count = (await idb.getAll('orcamentos_salvos')).length;
+        const badge = container.querySelector('#calc-gallery-count');
+        badge.textContent = count;
+        badge.hidden = count === 0;
+    }
+
+    function closeModal() {
+        modalRoot.innerHTML = '';
+    }
+
+    function showSaveModal(captureTarget) {
+        modalRoot.innerHTML = `
+            <div class="calc-modal-backdrop">
+                <div class="calc-modal calc-save-modal" role="dialog" aria-modal="true" aria-labelledby="calc-save-title">
+                    <button class="calc-modal-close" type="button" aria-label="Fechar">✕</button>
+                    <div class="calc-modal-icon">${cameraIcon}</div>
+                    <h2 id="calc-save-title">Salvar recorte do orçamento</h2>
+                    <p>Identifique este cálculo para encontrá-lo depois na coleção.</p>
+                    <label for="calc-product-name">Nome do produto</label>
+                    <input id="calc-product-name" type="text" maxlength="100" placeholder="Ex.: Vaso espiral" autocomplete="off">
+                    <label for="calc-product-qty">Quantidade</label>
+                    <input id="calc-product-qty" type="number" min="1" step="1" value="${lastCalculatedQty}">
+                    <div class="calc-modal-actions">
+                        <button class="btn btn-ghost calc-cancel-save" type="button">Cancelar</button>
+                        <button class="btn btn-primary calc-confirm-save" type="button">${cameraIcon} Salvar foto</button>
+                    </div>
+                </div>
+            </div>`;
+        const nameInput = modalRoot.querySelector('#calc-product-name');
+        setTimeout(() => nameInput.focus(), 0);
+        modalRoot.querySelector('.calc-modal-close').addEventListener('click', closeModal);
+        modalRoot.querySelector('.calc-cancel-save').addEventListener('click', closeModal);
+        modalRoot.querySelector('.calc-modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+        modalRoot.querySelector('.calc-confirm-save').addEventListener('click', async () => {
+            const productName = nameInput.value.trim();
+            const quantity = Math.max(1, parseInt(modalRoot.querySelector('#calc-product-qty').value) || 1);
+            if (!productName) {
+                nameInput.classList.add('calc-input-error');
+                nameInput.focus();
+                return;
+            }
+            const button = modalRoot.querySelector('.calc-confirm-save');
+            button.disabled = true;
+            button.textContent = 'Gerando foto…';
+            const backdrop = modalRoot.querySelector('.calc-modal-backdrop');
+            backdrop.style.display = 'none';
+            try {
+                const blob = await captureElement(captureTarget);
+                const id = `orc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                const mediaPath = `src_media/orcamentos/${id}.png`;
+                await idb.putMedia(mediaPath, blob);
+                await idb.put('orcamentos_salvos', { id, nome_produto: productName, quantidade: quantity, media_path: mediaPath, criado_em: new Date().toISOString() });
+                closeModal();
+                await refreshGalleryCount();
+                showToast('Orçamento salvo na coleção.');
+            } catch (error) {
+                console.error('[calculadora] Falha ao salvar recorte:', error);
+                backdrop.style.display = '';
+                button.disabled = false;
+                button.textContent = 'Tentar novamente';
+                alert('Não foi possível salvar a imagem deste card.');
+            }
+        });
+    }
+
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'calc-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('show'));
+        setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 220); }, 2200);
+    }
+
+    async function showGallery() {
+        const records = (await idb.getAll('orcamentos_salvos')).sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
+        modalRoot.innerHTML = `
+            <div class="calc-modal-backdrop">
+                <div class="calc-modal calc-gallery-modal" role="dialog" aria-modal="true" aria-labelledby="calc-gallery-title">
+                    <div class="calc-gallery-header">
+                        <div><h2 id="calc-gallery-title">Coleção de orçamentos</h2><p>${records.length} ${records.length === 1 ? 'recorte salvo' : 'recortes salvos'}</p></div>
+                        <button class="calc-modal-close" type="button" aria-label="Fechar">✕</button>
+                    </div>
+                    <div class="calc-gallery-grid">${records.length ? records.map(r => `
+                        <article class="calc-saved-card" data-id="${escapeHtml(String(r.id))}">
+                            <div class="calc-saved-image"><div class="calc-image-loader">Carregando imagem…</div></div>
+                            <div class="calc-saved-info">
+                                <div><h3>${escapeHtml(r.nome_produto || 'Sem nome')}</h3><span>${Number(r.quantidade) || 1} unid. · ${new Date(r.criado_em).toLocaleDateString('pt-BR')}</span></div>
+                                <div class="calc-saved-actions">
+                                    <button class="calc-icon-btn calc-download" title="Baixar PNG" aria-label="Baixar PNG">↓</button>
+                                    <button class="calc-icon-btn danger calc-delete" title="Excluir recorte" aria-label="Excluir recorte">✕</button>
+                                </div>
+                            </div>
+                        </article>`).join('') : `<div class="calc-gallery-empty">${folderIcon}<h3>Nenhum orçamento salvo</h3><p>Calcule um extrato e use o botão de câmera no canto inferior direito do card.</p></div>`}</div>
+                </div>
+            </div>`;
+        modalRoot.querySelector('.calc-modal-close').addEventListener('click', closeModal);
+        modalRoot.querySelector('.calc-modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+        for (const record of records) {
+            const card = modalRoot.querySelector(`.calc-saved-card[data-id="${CSS.escape(String(record.id))}"]`);
+            const url = await idb.resolveMediaUrl(record.media_path);
+            const imageWrap = card.querySelector('.calc-saved-image');
+            imageWrap.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Orçamento de ${escapeHtml(record.nome_produto || '')}">` : '<div class="calc-image-loader">Imagem indisponível</div>';
+            card.querySelector('.calc-download').addEventListener('click', () => {
+                if (!url) return;
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = `${String(record.nome_produto || 'orcamento').replace(/[^a-z0-9_-]+/gi, '_')}_${record.quantidade || 1}un.png`;
+                anchor.click();
+            });
+            card.querySelector('.calc-delete').addEventListener('click', async () => {
+                if (!confirm(`Excluir o orçamento de "${record.nome_produto}"?`)) return;
+                await idb.deleteItem('orcamentos_salvos', record.id);
+                await idb.deleteMedia(record.media_path);
+                if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+                card.remove();
+                await refreshGalleryCount();
+                showGallery();
+            });
+        }
+    }
+
+    container.querySelector('#calc-open-gallery').addEventListener('click', showGallery);
+    refreshGalleryCount();
 
     // Helper para gerar as opções de filamento
     function getFilamentoOptionsHTML() {
@@ -275,6 +464,7 @@ export async function render(container) {
         const horas     = parseInt(container.querySelector('#calc-h').value) || 0;
         const mins      = parseInt(container.querySelector('#calc-m').value) || 0;
         const qty       = parseInt(container.querySelector('#calc-qty').value) || 1;
+        lastCalculatedQty = qty;
         const lucroPct  = parseFloat(container.querySelector('#calc-lucro').value) || 0;
         const plat      = container.querySelector('#calc-plat').value;
         const taxaPlat  = TAXAS_PLATAFORMA[plat] || 0;
@@ -299,7 +489,7 @@ export async function render(container) {
         // Renderizar Resultado Estilizado no formato do App
         const resultContainer = container.querySelector('#calc-result');
         resultContainer.innerHTML = `
-            <div style="background:#1e1e1e; border:1px solid #333; border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+            <div class="calc-capture-card" style="background:#1e1e1e; border:1px solid #333; border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
                 <div style="text-align:center; border-bottom:1px solid #333; padding-bottom:12px; margin-bottom:14px;">
                     <h3 style="font-size:1.15rem; color:#fff; font-weight:700; margin:0;">
                         📋 Extrato do Orçamento
@@ -372,7 +562,12 @@ export async function render(container) {
                     </div>
                     ${qty > 1 ? `<div style="font-size:0.8rem; color:#aaa; margin-top:2px;">(${formatBRL(precoFinalUnit)} por unidade)</div>` : ''}
                 </div>
+                <div class="calc-capture-action" data-capture-ignore="true">
+                    <button class="calc-save-shot-btn" type="button" title="Salvar foto deste orçamento">${cameraIcon}<span>Salvar recorte</span></button>
+                </div>
             </div>
         `;
+        const captureCard = resultContainer.querySelector('.calc-capture-card');
+        resultContainer.querySelector('.calc-save-shot-btn').addEventListener('click', () => showSaveModal(captureCard));
     });
 }

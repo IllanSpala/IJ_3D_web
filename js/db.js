@@ -5,7 +5,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 const DB_NAME    = 'IJ3D_WebCache';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 /* Tables from core/database.py that we replicate as object stores. */
 const TABLE_STORES = [
@@ -23,7 +23,8 @@ const TABLE_STORES = [
     'producao_partes',
     'producao_pedidos',
     'historico_sprints',
-    'vendas_manuais'
+    'vendas_manuais',
+    'orcamentos_salvos'
 ];
 
 /* Special stores */
@@ -133,6 +134,35 @@ export async function getAll(storeName) {
     });
 }
 
+/** Insert or replace one record and return its key when available. */
+export async function put(storeName, obj) {
+    if (window.electron) {
+        await window.electron.writeDB({ action: 'put', storeName, obj });
+        return obj.id;
+    }
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const st = tx.objectStore(storeName);
+        const key = (obj.id !== undefined && obj.id !== null) ? obj.id : undefined;
+        const req = key === undefined ? st.put(obj) : st.put(obj, key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = (e) => reject(e.target.error);
+    });
+}
+
+/** Delete one record by key. */
+export async function deleteItem(storeName, id) {
+    if (window.electron) return window.electron.writeDB({ action: 'delete', storeName, id });
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const req = tx.objectStore(storeName).delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = (e) => reject(e.target.error);
+    });
+}
+
 /* ── Media (Blob) helpers ────────────────────────────────────── */
 
 /**
@@ -165,6 +195,18 @@ export async function getMedia(path) {
         const req = st.get(path);
         req.onsuccess = () => resolve(req.result || null);
         req.onerror   = (e) => reject(e.target.error);
+    });
+}
+
+/** Delete a media file/blob by its relative path key. */
+export async function deleteMedia(path) {
+    if (window.electron) return window.electron.deleteMedia(path);
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(MEDIA_STORE, 'readwrite');
+        const req = tx.objectStore(MEDIA_STORE).delete(path);
+        req.onsuccess = () => resolve();
+        req.onerror = (e) => reject(e.target.error);
     });
 }
 

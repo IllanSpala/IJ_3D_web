@@ -18,7 +18,8 @@ export async function exportBackup(onProgress = () => {}) {
         'configuracoes', 'filamentos', 'hist_impressoes', 'hist_filamentos', 
         'hist_fotos', 'ferramentas_insumos', 'pedidos', 'pedidos_v2', 
         'pedidos_itens', 'manutencao', 'historico_impressao', 
-        'producao_partes', 'producao_pedidos', 'historico_sprints', 'vendas_manuais'
+        'producao_partes', 'producao_pedidos', 'historico_sprints', 'vendas_manuais',
+        'orcamentos_salvos'
     ];
     
     let processed = 0;

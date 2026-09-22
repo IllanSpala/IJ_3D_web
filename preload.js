@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('electron', {
     readDB: (query) => ipcRenderer.invoke('read-db', query),
     writeDB: (data) => ipcRenderer.invoke('write-db', data),
     saveMedia: (buffer, filename) => ipcRenderer.invoke('save-media', buffer, filename),
+    deleteMedia: (filename) => ipcRenderer.invoke('delete-media', filename),
+    captureRegion: (rect) => ipcRenderer.invoke('capture-region', rect),
 });
