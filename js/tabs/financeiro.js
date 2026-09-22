@@ -8,18 +8,6 @@ import { formatBRL, TAXAS_PLATAFORMA, escapeHtml } from '../utils.js';
 const folderIcon = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>`;
 const cameraIcon = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5 13 3h-2L9.5 5H6a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3z"/><circle cx="12" cy="12.5" r="3.5"/></svg>`;
 
-function inlineComputedStyles(source, clone) {
-    const sourceChildren = source.children;
-    const cloneChildren = clone.children;
-    const computed = getComputedStyle(source);
-    for (const property of computed) clone.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
-    clone.querySelectorAll('[data-capture-ignore]').forEach(el => el.remove());
-    for (let i = 0; i < sourceChildren.length; i++) {
-        if (sourceChildren[i].hasAttribute('data-capture-ignore') || !cloneChildren[i]) continue;
-        inlineComputedStyles(sourceChildren[i], cloneChildren[i]);
-    }
-}
-
 async function captureElement(element) {
     await document.fonts?.ready;
     const ignored = [...element.querySelectorAll('[data-capture-ignore]')];
@@ -33,29 +21,22 @@ async function captureElement(element) {
             return new Blob([png], { type: 'image/png' });
         }
 
-        const clone = element.cloneNode(true);
-        inlineComputedStyles(element, clone);
-        clone.style.margin = '0';
-        clone.style.width = `${rect.width}px`;
-        clone.style.height = `${rect.height}px`;
-        const serialized = new XMLSerializer().serializeToString(clone);
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${serialized}</div></foreignObject></svg>`;
-        const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
-        const img = new Image();
-        img.src = svgUrl;
-        try {
-            await img.decode();
-            const scale = Math.max(2, window.devicePixelRatio || 1);
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(rect.width * scale);
-            canvas.height = Math.round(rect.height * scale);
-            const ctx = canvas.getContext('2d');
-            ctx.scale(scale, scale);
-            ctx.drawImage(img, 0, 0, rect.width, rect.height);
-            return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Não foi possível gerar a imagem.')), 'image/png'));
-        } finally {
-            URL.revokeObjectURL(svgUrl);
+        if (typeof window.html2canvas !== 'function') {
+            throw new Error('Biblioteca de captura não carregada.');
         }
+        const canvas = await window.html2canvas(element, {
+            backgroundColor: null,
+            scale: Math.max(2, window.devicePixelRatio || 1),
+            logging: false,
+            useCORS: true,
+            imageTimeout: 5000,
+            width: Math.ceil(rect.width),
+            height: Math.ceil(rect.height)
+        });
+        return await new Promise((resolve, reject) => canvas.toBlob(
+            blob => blob ? resolve(blob) : reject(new Error('Não foi possível converter a captura para PNG.')),
+            'image/png'
+        ));
     } finally {
         ignored.forEach((el, index) => { el.style.display = previousDisplays[index]; });
     }
@@ -241,7 +222,7 @@ export async function render(container) {
                 backdrop.style.display = '';
                 button.disabled = false;
                 button.textContent = 'Tentar novamente';
-                alert('Não foi possível salvar a imagem deste card.');
+                alert(`Não foi possível salvar a imagem deste card.\n\nDetalhe: ${error.message || error}`);
             }
         });
     }
