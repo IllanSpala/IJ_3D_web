@@ -236,6 +236,36 @@ export async function render(container) {
         setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 220); }, 2200);
     }
 
+    function showImageViewer(record, url) {
+        if (!url || modalRoot.querySelector('.calc-image-viewer-backdrop')) return;
+        const viewer = document.createElement('div');
+        viewer.className = 'calc-image-viewer-backdrop';
+        viewer.innerHTML = `
+            <div class="calc-image-viewer" role="dialog" aria-modal="true" aria-label="Orçamento ampliado de ${escapeHtml(record.nome_produto || 'produto')}">
+                <div class="calc-image-viewer-header">
+                    <div>
+                        <h3>${escapeHtml(record.nome_produto || 'Sem nome')}</h3>
+                        <span>${Number(record.quantidade) || 1} unid. · ${new Date(record.criado_em).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <button class="calc-image-viewer-close" type="button" aria-label="Fechar imagem ampliada">✕</button>
+                </div>
+                <div class="calc-image-viewer-scroll">
+                    <img src="${escapeHtml(url)}" alt="Orçamento completo de ${escapeHtml(record.nome_produto || '')}">
+                </div>
+            </div>`;
+        modalRoot.appendChild(viewer);
+
+        const closeViewer = () => {
+            document.removeEventListener('keydown', onViewerKeydown);
+            viewer.remove();
+        };
+        const onViewerKeydown = (event) => { if (event.key === 'Escape') closeViewer(); };
+        viewer.querySelector('.calc-image-viewer-close').addEventListener('click', closeViewer);
+        viewer.addEventListener('click', event => { if (event.target === viewer) closeViewer(); });
+        document.addEventListener('keydown', onViewerKeydown);
+        viewer.querySelector('.calc-image-viewer-close').focus();
+    }
+
     async function showGallery() {
         const records = (await idb.getAll('orcamentos_salvos')).sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));
         modalRoot.innerHTML = `
@@ -265,7 +295,19 @@ export async function render(container) {
             const card = modalRoot.querySelector(`.calc-saved-card[data-id="${CSS.escape(String(record.id))}"]`);
             const url = await idb.resolveMediaUrl(record.media_path);
             const imageWrap = card.querySelector('.calc-saved-image');
-            imageWrap.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Orçamento de ${escapeHtml(record.nome_produto || '')}">` : '<div class="calc-image-loader">Imagem indisponível</div>';
+            imageWrap.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Orçamento de ${escapeHtml(record.nome_produto || '')}"><span class="calc-image-expand-hint">Duplo clique para ampliar</span>` : '<div class="calc-image-loader">Imagem indisponível</div>';
+            if (url) {
+                imageWrap.tabIndex = 0;
+                imageWrap.setAttribute('role', 'button');
+                imageWrap.setAttribute('aria-label', `Ampliar orçamento de ${record.nome_produto || 'produto'}`);
+                imageWrap.addEventListener('dblclick', () => showImageViewer(record, url));
+                imageWrap.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        showImageViewer(record, url);
+                    }
+                });
+            }
             card.querySelector('.calc-download').addEventListener('click', () => {
                 if (!url) return;
                 const anchor = document.createElement('a');
