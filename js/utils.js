@@ -31,9 +31,19 @@ export function formatDate(dateStr) {
     // Already DD/MM/YYYY?
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
     // ISO format YYYY-MM-DD
-    const parts = str.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
     return str;
+}
+
+/** Convert supported date formats to a sortable timestamp. */
+export function dateTimestamp(value) {
+    if (!value) return 0;
+    const str = String(value).trim();
+    const br = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1])).getTime();
+    const parsed = Date.parse(str);
+    return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 /**

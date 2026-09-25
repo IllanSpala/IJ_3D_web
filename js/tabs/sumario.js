@@ -1,26 +1,50 @@
 /* Tab: Sumário Financeiro */
 import * as idb from '../db.js';
-import { formatBRL, formatDate, escapeHtml } from '../utils.js';
+import { formatBRL, formatDate, escapeHtml, dateTimestamp } from '../utils.js';
+
+function financialDate(record, preferredFields = []) {
+    const fields = [...preferredFields, 'criado_em', 'created_at', 'added_at'];
+    for (const field of fields) {
+        if (record?.[field]) return record[field];
+    }
+    const numericId = Number(record?.id);
+    if (Number.isFinite(numericId) && numericId >= Date.UTC(2000, 0, 1)) {
+        return new Date(numericId).toISOString();
+    }
+    return null;
+}
 
 export async function render(container) {
-    const pedidos = await idb.getAll('pedidos_v2');
-    const almox   = await idb.getAll('ferramentas_insumos');
-    const fils    = await idb.getAll('filamentos');
-    const vendas  = await idb.getAll('vendas_manuais');
+    let pedidos = await idb.getAll('pedidos_v2');
+    let almox   = await idb.getAll('ferramentas_insumos');
+    let fils    = await idb.getAll('filamentos');
+    let vendas  = await idb.getAll('vendas_manuais');
+
+    // Backfill once for legacy/imported records. putAll applies the same central
+    // automatic-date rule used by every new write in the system.
+    async function ensureDated(storeName, rows) {
+        if (!rows.some(row => !row.criado_em)) return rows;
+        await idb.putAll(storeName, rows);
+        return idb.getAll(storeName);
+    }
+    pedidos = await ensureDated('pedidos_v2', pedidos);
+    almox = await ensureDated('ferramentas_insumos', almox);
+    fils = await ensureDated('filamentos', fils);
+    vendas = await ensureDated('vendas_manuais', vendas);
 
     let allEntries = [];
 
     // Receitas from pedidos finalizados (Kanban)
     for (const p of pedidos) {
         if ((p.status || '').toUpperCase() === 'FINALIZADO' && p.valor_cobrado) {
-            allEntries.push({ date: p.data_entrega, desc: `Pedido Kanban: ${p.nome_cliente||'—'}`, value: parseFloat(p.valor_cobrado), type: 'receita', category: 'pedidos' });
+            allEntries.push({ date: financialDate(p, ['data_finalizacao', 'finalizado_em', 'data_entrega']), desc: `Pedido Kanban: ${p.nome_cliente||'—'}`, value: parseFloat(p.valor_cobrado), type: 'receita', category: 'pedidos' });
         }
     }
     
     // Receitas from Vendas Manuais
     for (const v of vendas) {
         if (v.preco) {
-            allEntries.push({ date: v.data, desc: `Venda Manual (${v.cliente}): ${v.descricao_item||'—'}`, value: parseFloat(v.preco), type: 'receita', category: 'vendas_manuais' });
+            allEntries.push({ date: financialDate(v, ['data']), desc: `Venda Manual (${v.cliente}): ${v.descricao_item||'—'}`, value: parseFloat(v.preco), type: 'receita', category: 'vendas_manuais' });
         }
     }
 
@@ -28,7 +52,7 @@ export async function render(container) {
     for (const f of fils) {
         if (f.preco_rolo) {
             const qtd = parseInt(f.quantidade_rolos) || 1;
-            allEntries.push({ date: f.data_registro || null, desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos' });
+            allEntries.push({ date: financialDate(f, ['data_registro', 'data_compra']), desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos' });
         }
     }
     
@@ -39,11 +63,9 @@ export async function render(container) {
         if (a.ultimo_valor) {
             const qtdRaw = parseInt(a.quantidade);
             const qtdLabel = isNaN(qtdRaw) ? '' : ` x${qtdRaw}`;
-            allEntries.push({ date: a.data || null, desc: `Insumo/Ferramenta: ${a.nome}${qtdLabel}`, value: -a.ultimo_valor, type: 'despesa', category: 'insumos' });
+            allEntries.push({ date: financialDate(a, ['data', 'data_compra', 'data_registro']), desc: `Insumo/Ferramenta: ${a.nome}${qtdLabel}`, value: -a.ultimo_valor, type: 'despesa', category: 'insumos' });
         }
     }
-
-    allEntries.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     container.innerHTML = `
         <div style="max-width:1200px; margin:0 auto;">
@@ -51,13 +73,17 @@ export async function render(container) {
                 <h2 style="font-size:1.4rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; margin:0;">
                     📊 DRE / Sumário Financeiro
                 </h2>
-                <div style="display:flex; gap:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                     <select id="dre-filter" style="background:#111; border:1px solid #444; color:#fff; padding:8px 12px; border-radius:6px;">
                         <option value="all">Todas as Categorias</option>
                         <option value="insumos">Apenas Insumos / Ferramentas</option>
                         <option value="filamentos">Apenas Filamentos</option>
                         <option value="pedidos">Apenas Pedidos (Kanban)</option>
                         <option value="vendas_manuais">Apenas Vendas Manuais</option>
+                    </select>
+                    <select id="dre-date-order" aria-label="Ordenar lançamentos por data" style="background:#111; border:1px solid #444; color:#fff; padding:8px 12px; border-radius:6px;">
+                        <option value="desc">Mais recentes primeiro</option>
+                        <option value="asc">Mais antigos primeiro</option>
                     </select>
                     <button class="btn btn-primary" id="btn-nova-venda" style="font-weight:700;">+ Venda Manual</button>
                 </div>
@@ -82,7 +108,7 @@ export async function render(container) {
                         <input id="vm-preco" type="number" step="0.01" placeholder="0.00" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
                     </div>
                     <div>
-                        <label style="display:block; font-size:0.8rem; color:#aaa; margin-bottom:4px;">Data *</label>
+                        <label style="display:block; font-size:0.8rem; color:#aaa; margin-bottom:4px;">Data (automática se não informada)</label>
                         <input id="vm-data" type="date" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
                     </div>
                 </div>
@@ -106,12 +132,15 @@ export async function render(container) {
     `;
 
     const filterEl = container.querySelector('#dre-filter');
+    const dateOrderEl = container.querySelector('#dre-date-order');
     const totalsContainer = container.querySelector('#dre-totals-container');
     const tbody = container.querySelector('#dre-tbody');
 
     function updateView() {
         const cat = filterEl.value;
-        const filtered = cat === 'all' ? allEntries : allEntries.filter(e => e.category === cat);
+        const filtered = (cat === 'all' ? [...allEntries] : allEntries.filter(e => e.category === cat));
+        const direction = dateOrderEl.value === 'asc' ? 1 : -1;
+        filtered.sort((a, b) => (dateTimestamp(a.date) - dateTimestamp(b.date)) * direction);
 
         const totalRec = filtered.filter(e => e.type === 'receita').reduce((s, e) => s + e.value, 0);
         const totalDesp = filtered.filter(e => e.type === 'despesa').reduce((s, e) => s + Math.abs(e.value), 0);
@@ -143,6 +172,7 @@ export async function render(container) {
     }
 
     filterEl.addEventListener('change', updateView);
+    dateOrderEl.addEventListener('change', updateView);
     updateView(); // Initial render
 
     const formNovo = container.querySelector('#form-venda-manual');
@@ -171,7 +201,7 @@ export async function render(container) {
         const cliente = container.querySelector('#vm-cliente').value.trim();
         const desc = container.querySelector('#vm-desc').value.trim();
         const preco = parseFloat(container.querySelector('#vm-preco').value);
-        const data = container.querySelector('#vm-data').value;
+        const data = container.querySelector('#vm-data').value || new Date().toISOString().slice(0, 10);
 
         if (!cliente || !desc || isNaN(preco)) {
             alert('Preencha os campos obrigatórios corretamente.');

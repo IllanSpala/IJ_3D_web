@@ -14,7 +14,8 @@ const TABS = [
     { id: 'almoxarifado', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>', label: 'Almoxarifado', mod: () => import('./tabs/almoxarifado.js?v=' + CACHE_VER) },
     { id: 'financeiro',   icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>', label: 'Calculadora', mod: () => import('./tabs/financeiro.js?v=' + CACHE_VER) },
     { id: 'pedidos',      icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>', label: 'Pedidos',      mod: () => import('./tabs/pedidos.js?v=' + CACHE_VER) },
-    { id: 'producao',     icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="9"></rect><rect x="14" y="7" width="3" height="5"></rect></svg>', label: 'Produção (Sprint)', mod: () => import('./tabs/producao.js?v=' + CACHE_VER) },
+    // Mantida no código para futura reativação, mas temporariamente fora da navegação.
+    { id: 'producao', enabled: false, icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="9"></rect><rect x="14" y="7" width="3" height="5"></rect></svg>', label: 'Produção (Sprint)', mod: () => import('./tabs/producao.js?v=' + CACHE_VER) },
     { id: 'historico',    icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',  label: 'Histórico',    mod: () => import('./tabs/historico.js?v=' + CACHE_VER) },
     { id: 'sumario',      icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>', label: 'Sumário',      mod: () => import('./tabs/sumario.js?v=' + CACHE_VER) }
 ];
@@ -133,7 +134,7 @@ function buildSidebar() {
     const bottom = document.getElementById('sidebar-bottom');
     nav.innerHTML = '';
 
-    for (const tab of TABS) {
+    for (const tab of TABS.filter(tab => tab.enabled !== false)) {
         const btn = document.createElement('button');
         btn.className = 'sidebar-btn';
         btn.dataset.tab = tab.id;

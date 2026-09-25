@@ -36,6 +36,23 @@ const ALL_STORES = [...TABLE_STORES, MEDIA_STORE, META_STORE];
 let _db = null;
 
 /**
+ * Every business record receives a stable creation timestamp. New records in
+ * this app normally use Date.now() as id, so that timestamp is preferred when
+ * available; imported legacy rows fall back to the moment they enter the app.
+ */
+function withAutomaticDate(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.criado_em) return obj;
+    const copy = { ...obj };
+    const numericId = Number(copy.id);
+    const minTimestamp = Date.UTC(2000, 0, 1);
+    const maxTimestamp = Date.now() + (366 * 24 * 60 * 60 * 1000);
+    copy.criado_em = Number.isFinite(numericId) && numericId >= minTimestamp && numericId <= maxTimestamp
+        ? new Date(numericId).toISOString()
+        : new Date().toISOString();
+    return copy;
+}
+
+/**
  * Open (or upgrade) the IndexedDB database.
  * @returns {Promise<IDBDatabase>}
  */
@@ -90,14 +107,15 @@ export async function clearStore(storeName) {
  * Insert multiple rows into a store (clearing it first).
  */
 export async function putAll(storeName, rows) {
-    if (window.electron) return await window.electron.writeDB({ action: 'putAll', storeName, rows });
+    const datedRows = rows.map(withAutomaticDate);
+    if (window.electron) return await window.electron.writeDB({ action: 'putAll', storeName, rows: datedRows });
     const db = await openDB();
     if (!db.objectStoreNames.contains(storeName)) return;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
         const st = tx.objectStore(storeName);
         st.clear();
-        for (const row of rows) {
+        for (const row of datedRows) {
             // Use the row's own id as the key if it exists, so that records
             // imported from SQLite backup keep their original IDs.
             const key = (row.id !== undefined && row.id !== null) ? row.id : undefined;
@@ -136,6 +154,7 @@ export async function getAll(storeName) {
 
 /** Insert or replace one record and return its key when available. */
 export async function put(storeName, obj) {
+    obj = withAutomaticDate(obj);
     if (window.electron) {
         await window.electron.writeDB({ action: 'put', storeName, obj });
         return obj.id;
