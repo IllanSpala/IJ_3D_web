@@ -366,6 +366,94 @@ a:hover { text-decoration: underline; }
     display: block;
 }
 
+/* ── Almoxarifado: cards horizontais compactos ─────────────── */
+.almox-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.almox-item-card {
+    position: relative;
+    min-height: 116px;
+    align-items: stretch;
+    gap: 14px;
+    padding: 12px;
+}
+
+.almox-card-img {
+    width: 104px;
+    height: 92px;
+    align-self: center;
+    border: 1px solid #303030;
+    object-fit: cover;
+}
+
+.almox-card-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding-right: 62px;
+}
+
+.almox-card-info h3 {
+    margin: 0;
+    color: #f0f0f0;
+    font-size: 1rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+}
+
+.almox-card-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 12px;
+    color: var(--text-secondary);
+    font-size: .76rem;
+    line-height: 1.35;
+}
+
+.almox-card-details span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.almox-status-badge {
+    width: fit-content;
+}
+
+.almox-card-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    display: flex;
+    gap: 5px;
+}
+
+.almox-card-action {
+    width: 27px;
+    height: 27px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid #383838;
+    border-radius: 6px;
+    background: #242424;
+    color: #bbb;
+    font-size: .72rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.almox-card-action:hover {
+    border-color: #666;
+    background: #303030;
+    color: #fff;
+}
+
 /* ── Status Badge ────────────────────────────────────────────── */
 .badge {
     display: inline-block;
@@ -738,10 +826,13 @@ a:hover { text-decoration: underline; }
     .calc-layout { grid-template-columns: 1fr; }
     .kanban-board { grid-template-columns: 1fr; }
     .items-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .almox-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
     .tab-pane { padding: 20px 16px; }
     .sidebar { width: 44px; min-width: 44px; }
     .sidebar-btn { width: 34px; height: 34px; font-size: 16px; }
+    .almox-card-img { width: 88px; height: 88px; }
+    .almox-card-info { padding-right: 0; padding-top: 30px; }
 }

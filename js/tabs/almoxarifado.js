@@ -40,7 +40,7 @@ export async function render(container) {
                     <option value="Esgotado">Esgotados</option>
                 </select>
             </div>
-            <div class="items-grid" id="almox-grid"></div>
+            <div class="items-grid almox-grid" id="almox-grid"></div>
             <div class="load-more-container" id="almox-load-more"></div>
         </div>
 
@@ -195,27 +195,24 @@ async function _renderPage(container) {
     for (const item of slice) {
         const imgUrl = await idb.resolveMediaUrl(item.caminho_foto);
         const card = document.createElement('div');
-        card.className = 'item-card';
-        card.style.position = 'relative';
+        card.className = 'item-card almox-item-card';
 
         const statusColor = (item.status === 'Esgotado') ? 'badge-depleted' : 'badge-active';
         
         card.innerHTML = `
-            <div style="position:absolute; top:8px; right:8px; display:flex; gap:4px; z-index:10; flex-direction:column;">
-                <div style="display:flex; gap:4px;">
-                    <button class="btn btn-ghost almox-edit-btn" data-id="${item.id}" style="padding:4px; background:rgba(0,0,0,0.5); border-radius:4px;" title="Editar">✏️</button>
-                    <button class="btn btn-ghost almox-del-btn" data-id="${item.id}" style="padding:4px; background:rgba(0,0,0,0.5); border-radius:4px;" title="Excluir">🗑️</button>
-                </div>
+            <div class="almox-card-actions">
+                <button class="almox-card-action almox-edit-btn" data-id="${item.id}" title="Editar" aria-label="Editar ${escapeHtml(item.nome)}">✏️</button>
+                <button class="almox-card-action almox-del-btn" data-id="${item.id}" title="Excluir" aria-label="Excluir ${escapeHtml(item.nome)}">🗑️</button>
             </div>
-            <img class="item-card-img" src="${imgUrl || placeholderImg()}" alt="${escapeHtml(item.nome)}">
-            <div class="item-card-info" style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:0; padding-right:30px;">
-                <h3 style="margin:0;font-size:1.1rem; padding-right:20px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.nome)}">${escapeHtml(item.nome)}</h3>
-                <div class="meta" style="margin-bottom:4px; display:flex; flex-direction:column; gap:2px;">
-                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(item.categoria || '—')}">📁 ${escapeHtml(item.categoria || '—')}</span>
-                    ${item.ultimo_valor ? `<span>💰 ${formatBRL(item.ultimo_valor)}</span>` : ''}
-                    ${item.quantidade ? `<span>📦 ${escapeHtml(item.quantidade)}</span>` : ''}
-                    <span style="margin-top:2px;"><span class="badge ${statusColor}">${escapeHtml(item.status || 'Ativo')}</span></span>
+            <img class="item-card-img almox-card-img" src="${imgUrl || placeholderImg()}" alt="${escapeHtml(item.nome)}">
+            <div class="item-card-info almox-card-info">
+                <h3 title="${escapeHtml(item.nome)}">${escapeHtml(item.nome)}</h3>
+                <div class="almox-card-details">
+                    <span title="Categoria: ${escapeHtml(item.categoria || '—')}">📁 ${escapeHtml(item.categoria || '—')}</span>
+                    <span>💰 ${formatBRL(item.ultimo_valor || 0)}</span>
+                    ${item.quantidade ? `<span title="Quantidade: ${escapeHtml(item.quantidade)}">📦 ${escapeHtml(item.quantidade)}</span>` : ''}
                 </div>
+                <span class="badge ${statusColor} almox-status-badge">${escapeHtml(item.status || 'Ativo')}</span>
             </div>
         `;
         grid.appendChild(card);
