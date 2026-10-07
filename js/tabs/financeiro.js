@@ -50,6 +50,7 @@ export async function render(container) {
     const custoHoraDefault = parseFloat(config.calc_custo_hora) || 1.50;
     const lucroPctDefault  = parseFloat(config.calc_lucro_pct)  || 100;
     const embalagemDefault = parseFloat(config.calc_embalagem)  || 0;
+    const reservaPerdasDefault = parseFloat(config.calc_reserva_perdas_pct) || 0;
 
     const platOptions = Object.keys(TAXAS_PLATAFORMA).map(p => 
         `<option value="${p}" ${p === 'Direto' ? 'selected' : ''}>${p}</option>`
@@ -92,7 +93,7 @@ export async function render(container) {
                             <label style="font-weight:600; font-size:0.88rem; color:var(--text-primary); margin:0;">
                                 📦 Custos Adicionais
                             </label>
-                            <span style="font-size:0.75rem; color:#888;">Embalagem, plastico bolha, envio, etc.</span>
+                            <span style="font-size:0.75rem; color:#888;">Valores por unidade</span>
                         </div>
 
                         <div id="calc-custos-extra-list">
@@ -129,9 +130,21 @@ export async function render(container) {
                             <input id="calc-qty" type="number" min="1" value="1">
                         </div>
                         <div style="flex:1;">
-                            <label for="calc-lucro">Margem de Lucro (%)</label>
-                            <input id="calc-lucro" type="number" value="${lucroPctDefault}">
+                            <label for="calc-metodo">Método de Precificação</label>
+                            <select id="calc-metodo">
+                                <option value="margem">Margem de lucro (%)</option>
+                                <option value="markup" selected>Markup sobre custo (%)</option>
+                            </select>
                         </div>
+                        <div style="flex:1;">
+                            <label for="calc-lucro">Percentual informado (%)</label>
+                            <input id="calc-lucro" type="number" min="0" step="0.01" value="${lucroPctDefault}">
+                        </div>
+                    </div>
+
+                    <div class="calc-input-group" style="margin:0;">
+                        <label for="calc-reserva-perdas">Reserva para perdas/reimpressões (%)</label>
+                        <input id="calc-reserva-perdas" type="number" min="0" step="0.01" value="${reservaPerdasDefault}">
                     </div>
 
                     <div class="calc-input-group" style="margin:0;">
@@ -391,7 +404,7 @@ export async function render(container) {
                 <input class="calc-extra-nome" type="text" placeholder="Nome (ex: Embalagem)" value="${escapeHtml(nome)}" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:6px 8px; border-radius:4px; font-size:0.85rem;">
             </div>
             <div style="flex:1;">
-                <input class="calc-extra-valor" type="number" step="0.01" placeholder="Valor (R$)" value="${valor ? valor.toFixed(2) : ''}" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:6px 8px; border-radius:4px; font-size:0.85rem;">
+                <input class="calc-extra-valor" type="number" min="0" step="0.01" placeholder="R$/unidade" value="${valor ? valor.toFixed(2) : ''}" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:6px 8px; border-radius:4px; font-size:0.85rem;">
             </div>
             <button class="btn btn-ghost calc-extra-del" style="color:#d64545; padding:6px 10px;" title="Remover Custo">✕</button>
         `;
@@ -484,18 +497,38 @@ export async function render(container) {
         const mins      = parseInt(container.querySelector('#calc-m').value) || 0;
         const qty       = parseInt(container.querySelector('#calc-qty').value) || 1;
         lastCalculatedQty = qty;
+        const metodo = container.querySelector('#calc-metodo').value;
         const lucroPct  = parseFloat(container.querySelector('#calc-lucro').value) || 0;
+        const reservaPct = parseFloat(container.querySelector('#calc-reserva-perdas').value) || 0;
         const plat      = container.querySelector('#calc-plat').value;
         const taxaPlat  = TAXAS_PLATAFORMA[plat] || 0;
 
         const tempoTotalHoras = horas + mins / 60;
         const custoOperacional = custoHora * tempoTotalHoras;
 
-        const custoTotalGlobal = custoMateriaisTotal + custoOperacional + custoExtrasTotal;
+        if (metodo === 'margem' && lucroPct >= 100) {
+            alert('A margem de lucro deve ser menor que 100%.');
+            container.querySelector('#calc-lucro').focus();
+            return;
+        }
+        if (lucroPct < 0 || reservaPct < 0) {
+            alert('Os percentuais não podem ser negativos.');
+            return;
+        }
+
+        const custoImpressaoTotal = custoMateriaisTotal + custoOperacional;
+        const custoExtrasPedido = custoExtrasTotal * qty;
+        const custoBaseReserva = custoImpressaoTotal + custoExtrasPedido;
+        const custoReservaTotal = custoBaseReserva * (reservaPct / 100);
+        const custoTotalGlobal = custoBaseReserva + custoReservaTotal;
         const custoUnitario    = custoTotalGlobal / qty;
 
-        const valorLucroUnit   = custoUnitario * (lucroPct / 100);
-        const precoSemTaxaUnit = custoUnitario + valorLucroUnit;
+        const precoSemTaxaUnit = metodo === 'margem'
+            ? custoUnitario / (1 - lucroPct / 100)
+            : custoUnitario * (1 + lucroPct / 100);
+        const valorLucroUnit = precoSemTaxaUnit - custoUnitario;
+        const margemEfetiva = precoSemTaxaUnit > 0 ? (valorLucroUnit / precoSemTaxaUnit) * 100 : 0;
+        const markupEfetivo = custoUnitario > 0 ? (valorLucroUnit / custoUnitario) * 100 : 0;
 
         const precoFinalUnit   = taxaPlat > 0 ? precoSemTaxaUnit / (1 - taxaPlat) : precoSemTaxaUnit;
         const valorTaxaUnit    = precoFinalUnit - precoSemTaxaUnit;
@@ -536,7 +569,8 @@ export async function render(container) {
                         CUSTOS ADICIONAIS
                     </div>
                     ${extraLinesHTML.length ? extraLinesHTML.join('') : '<div style="color:#666; font-size:0.8rem;">Sem custos adicionais.</div>'}
-                    ${custoExtrasTotal > 0 ? `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:0.8rem; color:#888;"><span>Subtotal Extras:</span><strong style="color:#eee;">${formatBRL(custoExtrasTotal)}</strong></div>` : ''}
+                    ${custoExtrasTotal > 0 ? `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:0.8rem; color:#888;"><span>Subtotal Extras (por unidade):</span><strong style="color:#eee;">${formatBRL(custoExtrasTotal)}</strong></div>` : ''}
+                    ${reservaPct > 0 ? `<div style="display:flex; justify-content:space-between; margin-top:4px; font-size:0.8rem; color:#888;"><span>Reserva para perdas (${reservaPct}%):</span><strong style="color:#eee;">${formatBRL(custoReservaTotal)}</strong></div>` : ''}
                 </div>
 
                 <!-- Tempo / Operacional -->
@@ -556,15 +590,27 @@ export async function render(container) {
                         <span style="color:#888;">Custo de Produção Total:</span>
                         <span style="color:#eee; font-weight:600;">${formatBRL(custoTotalGlobal)}</span>
                     </div>
+                    <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;">
+                        <span style="color:#d64545;">Custo Unitário:</span>
+                        <span style="color:#d64545; font-weight:600;">${formatBRL(custoUnitario)}</span>
+                    </div>
                     ${qty > 1 ? `
                     <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem; font-weight:700;">
-                        <span style="color:#d64545;">Custo Unitário (${qty} unid):</span>
-                        <span style="color:#d64545;">${formatBRL(custoUnitario)}</span>
+                        <span style="color:#888;">Quantidade:</span><span style="color:#eee;">${qty} unid</span>
                     </div>` : ''}
                     <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;">
-                        <span style="color:#4ade80;">+ Margem de Lucro (${lucroPct}%):</span>
+                        <span style="color:#4ade80;">Método utilizado:</span>
+                        <span style="color:#4ade80; font-weight:600;">${metodo === 'margem' ? 'Margem' : 'Markup'}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;">
+                        <span style="color:#4ade80;">Percentual informado:</span><span style="color:#4ade80; font-weight:600;">${lucroPct.toFixed(2)}%</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;">
+                        <span style="color:#4ade80;">Lucro em reais:</span>
                         <span style="color:#4ade80; font-weight:600;">${formatBRL(valorLucroUnit * qty)}</span>
                     </div>
+                    <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;"><span style="color:#aaa;">Margem efetiva sobre a venda:</span><span style="color:#eee;">${margemEfetiva.toFixed(2)}%</span></div>
+                    <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;"><span style="color:#aaa;">Markup efetivo sobre o custo:</span><span style="color:#eee;">${markupEfetivo.toFixed(2)}%</span></div>
                     <div style="display:flex; justify-content:space-between; padding:2px 0; font-size:0.85rem;">
                         <span style="color:#d97706;">Taxa ${escapeHtml(plat)} (${(taxaPlat*100).toFixed(0)}%):</span>
                         <span style="color:#d97706; font-weight:600;">${formatBRL(valorTaxaUnit * qty)}</span>
@@ -579,7 +625,7 @@ export async function render(container) {
                     <div style="font-size:1.8rem; font-weight:800; color:#4ade80;">
                         ${formatBRL(precoFinalTotal)}
                     </div>
-                    ${qty > 1 ? `<div style="font-size:0.8rem; color:#aaa; margin-top:2px;">(${formatBRL(precoFinalUnit)} por unidade)</div>` : ''}
+                    <div style="font-size:0.8rem; color:#aaa; margin-top:2px;">Preço de Venda por Unidade: ${formatBRL(precoFinalUnit)}</div>
                 </div>
                 <div class="calc-capture-action" data-capture-ignore="true">
                     <button class="calc-save-shot-btn" type="button" title="Salvar foto deste orçamento">${cameraIcon}<span>Salvar recorte</span></button>
