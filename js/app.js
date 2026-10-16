@@ -23,6 +23,21 @@ const TABS = [
 let _activeTabId = null;
 const _tabCache = {};   // module cache
 
+/* Device hints complement the responsive CSS. Layout is decided primarily by
+   viewport and pointer capabilities, so resizing and tablet split-screen also
+   work without relying on a brittle user-agent check. */
+function syncDeviceMode() {
+    const compact = matchMedia('(max-width: 700px)').matches;
+    const touch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+    const mode = compact ? 'mobile' : (matchMedia('(max-width: 1024px)').matches ? 'tablet' : 'desktop');
+    document.documentElement.dataset.device = mode;
+    document.documentElement.classList.toggle('touch-device', touch);
+}
+
+syncDeviceMode();
+addEventListener('resize', syncDeviceMode, { passive: true });
+addEventListener('orientationchange', syncDeviceMode, { passive: true });
+
 async function boot() {
     try {
         const loaded = await idb.isDataLoaded();
@@ -139,7 +154,8 @@ function buildSidebar() {
         btn.className = 'sidebar-btn';
         btn.dataset.tab = tab.id;
         btn.dataset.tooltip = tab.label;
-        btn.innerHTML = tab.icon;
+        btn.setAttribute('aria-label', tab.label);
+        btn.innerHTML = `${tab.icon}<span class="sidebar-label">${tab.label}</span>`;
         btn.addEventListener('click', () => switchTab(tab.id));
         nav.appendChild(btn);
     }
@@ -151,7 +167,8 @@ function buildSidebar() {
     btnExport.id = 'btn-export-backup';
     btnExport.className = 'sidebar-btn btn-export';
     btnExport.dataset.tooltip = 'Exportar Backup (.zip)';
-    btnExport.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    btnExport.setAttribute('aria-label', 'Exportar backup');
+    btnExport.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span class="sidebar-label">Backup</span>';
     btnExport.addEventListener('click', async () => {
         // We need a simple progress overlay
         const ov = document.createElement('div');
@@ -181,7 +198,8 @@ function buildSidebar() {
     const btnReload = document.createElement('button');
     btnReload.className = 'sidebar-btn btn-export';
     btnReload.dataset.tooltip = 'Carregar Novo Backup (Limpar)';
-    btnReload.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>';
+    btnReload.setAttribute('aria-label', 'Carregar novo backup');
+    btnReload.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><span class="sidebar-label">Importar</span>';
     btnReload.addEventListener('click', async () => {
         if (confirm('Carregar um novo backup? (os dados atuais serão apagados e substituídos)')) {
             await idb.clearAll();
@@ -216,6 +234,11 @@ async function switchTab(tabId) {
     }
 
     pane.classList.add('active');
+    pane.dataset.tab = tabId;
+    document.title = `${tabDef.label} — IJ 3D Manager`;
+    if (matchMedia('(max-width: 700px)').matches) {
+        mainContent.scrollTo({ top: 0, behavior: 'auto' });
+    }
 
     // Render tab content (lazy-load module)
     if (!_tabCache[tabId]) {

@@ -657,11 +657,11 @@ function renderAnalytics(container) {
             }
         </style>
 
-        <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:stretch;">
+        <div class="hist-analytics-layout" style="display:flex; gap:20px; flex-wrap:wrap; align-items:stretch;">
             <!-- CANTO ESQUERDO: MÉTRICAS TOTAIS -->
-            <div style="flex:1; min-width:280px; max-width:380px; display:flex; flex-direction:column; gap:16px;">
+            <div class="hist-metrics" style="flex:1; min-width:280px; max-width:380px; display:flex; flex-direction:column; gap:16px;">
                 <!-- 1. Tempo Total de Impressão -->
-                <div style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                <div class="hist-metric-card" style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
                     <div style="font-size:0.82rem; color:#aaa; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
                         <span>⏱️ Tempo Total de Impressão</span>
                     </div>
@@ -672,7 +672,7 @@ function renderAnalytics(container) {
                 </div>
 
                 <!-- 2. Filamento Total Gasto -->
-                <div style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+                <div class="hist-metric-card" style="background:rgba(255, 255, 255, 0.03); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border:1px solid rgba(255, 255, 255, 0.08); border-radius:12px; padding:20px; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
                     <div style="font-size:0.82rem; color:#aaa; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
                         <span>⚖️ Filamento Total Gasto</span>
                     </div>
@@ -687,7 +687,7 @@ function renderAnalytics(container) {
             </div>
 
             <!-- CANTO DIREITO: GRÁFICO DE CONSUMO POR COR -->
-            <div style="flex:2; min-width:340px; background:#1e1e1e; border:1px solid #333; border-radius:12px; padding:20px; display:flex; flex-direction:column;">
+            <div class="hist-chart-card" style="flex:2; min-width:340px; background:#1e1e1e; border:1px solid #333; border-radius:12px; padding:20px; display:flex; flex-direction:column;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #2a2a2a; padding-bottom:10px;">
                     <h3 style="font-size:1.05rem; font-weight:700; color:#fff; margin:0; display:flex; align-items:center; gap:8px;">
                         📊 Consumo de Filamento por Cor
@@ -701,6 +701,5 @@ function renderAnalytics(container) {
         </div>
     `;
 }
-
 
 

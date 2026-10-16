@@ -190,7 +190,7 @@ async function _renderPage(container) {
     for (const f of slice) {
         const imgUrl = await idb.resolveMediaUrl(f.caminho_foto);
         const card = document.createElement('div');
-        card.className = 'item-card';
+        card.className = 'item-card filament-card';
         card.style.position = 'relative'; // Ensure absolute buttons stay inside
         card.dataset.id = f.id;
         
@@ -198,12 +198,12 @@ async function _renderPage(container) {
         const qtdReserva = parseInt(f.rolos_reserva) || 0;
 
         card.innerHTML = `
-            <div style="position:absolute; top:8px; right:8px; display:flex; gap:4px; z-index:10;">
+            <div class="fil-card-actions" style="position:absolute; top:8px; right:8px; display:flex; gap:4px; z-index:10;">
                 <button class="btn btn-ghost fil-edit-btn" data-id="${f.id}" style="padding:4px; background:rgba(0,0,0,0.5); border-radius:4px;" title="Editar">✏️</button>
                 <button class="btn btn-ghost fil-del-btn" data-id="${f.id}" style="padding:4px; background:rgba(0,0,0,0.5); border-radius:4px;" title="Excluir">🗑️</button>
             </div>
             <img class="item-card-img" src="${imgUrl || placeholderImg()}" alt="${escapeHtml(f.cor)}">
-            <div class="item-card-info" style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;">
+            <div class="item-card-info fil-card-info" style="display:flex; flex-direction:column; gap:6px; flex:1; min-width:0;">
                 <h3 style="margin:0;font-size:1.1rem; padding-right:50px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(f.marca)} ${escapeHtml(f.material)}">${escapeHtml(f.marca)} ${escapeHtml(f.material)}</h3>
                 <div class="meta" style="margin-bottom:4px; display:flex; flex-direction:column; gap:2px;">
                     <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(f.cor)}">🎨 ${escapeHtml(f.cor)}</span>
@@ -211,12 +211,13 @@ async function _renderPage(container) {
                     <span style="margin-top:2px;"><span class="badge ${statusBadgeClass(f.status || 'Ativo')}">${escapeHtml(f.status || 'Ativo')}</span></span>
                 </div>
                 
-                <div style="background:#1e1e1e; padding:10px 4px; border-radius:6px; border:1px solid #333; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; margin-top:auto;">
-                    <span style="font-size:0.8rem; color:#aaa; display:block;">Rolos disponíveis</span>
-                    <div style="display:flex; align-items:center; justify-content:center; gap:12px;">
-                        <button class="btn btn-ghost fil-btn-min-ativo" data-id="${f.id}" style="padding:2px 12px; font-size:1.3rem; color:#f87171;">-</button>
-                        <span style="font-weight:700; font-size:1.3rem; min-width:30px; text-align:center;">${qtdAtivos}</span>
-                        <button class="btn btn-ghost fil-btn-plus-ativo" data-id="${f.id}" style="padding:2px 12px; font-size:1.3rem; color:#4ade80;">+</button>
+                <div class="fil-stock-control">
+                    <button class="fil-stock-toggle" type="button" aria-label="${qtdAtivos} rolos disponíveis" aria-expanded="false" title="Rolos disponíveis">
+                        <span aria-hidden="true">🧵</span><strong>${qtdAtivos}</strong>
+                    </button>
+                    <div class="fil-stock-stepper" hidden>
+                        <button class="fil-stock-step fil-btn-min-ativo" data-id="${f.id}" aria-label="Remover um rolo">−</button>
+                        <button class="fil-stock-step fil-btn-plus-ativo" data-id="${f.id}" aria-label="Adicionar um rolo">+</button>
                     </div>
                 </div>
             </div>
@@ -225,6 +226,19 @@ async function _renderPage(container) {
     }
 
     _displayed += slice.length;
+
+    container.querySelectorAll('.fil-stock-toggle').forEach(btn => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = 'true';
+        btn.addEventListener('click', () => {
+            const stepper = btn.nextElementSibling;
+            const willOpen = stepper.hidden;
+            container.querySelectorAll('.fil-stock-stepper').forEach(el => { el.hidden = true; });
+            container.querySelectorAll('.fil-stock-toggle').forEach(el => el.setAttribute('aria-expanded', 'false'));
+            stepper.hidden = !willOpen;
+            btn.setAttribute('aria-expanded', String(willOpen));
+        });
+    });
 
     // Counters events
     container.querySelectorAll('.fil-btn-plus-ativo, .fil-btn-min-ativo').forEach(btn => {

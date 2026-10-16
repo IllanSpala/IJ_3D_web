@@ -135,6 +135,7 @@ export async function render(container) {
         { id: 'IMPRESSO/PINTANDO',  label: 'IMPRESSO/PINTANDO',  color: '#d97706', bg: '#2e2116' },
         { id: 'CONCLUIDO',          label: 'CONCLUÍDO',          color: '#10b981', bg: '#162e21' }
     ];
+    let activeMobileStatus = STATUS_COLUMNS[0].id;
 
     container.innerHTML = `
         <div style="max-width:1400px; margin:0 auto;">
@@ -219,10 +220,20 @@ export async function render(container) {
                 </div>
             </div>
 
-            <!-- Tabuleiro Kanban (4 Colunas) -->
+            <div class="kanban-mobile-tabs" role="tablist" aria-label="Etapa dos pedidos">
+                ${STATUS_COLUMNS.map((col, index) => `
+                    <button class="kanban-mobile-tab${index === 0 ? ' active' : ''}" type="button" role="tab"
+                            aria-selected="${index === 0}" data-status="${col.id}" style="--status-color:${col.color}">
+                        <span>${col.label === 'IMPRESSO/PINTANDO' ? 'PRODUÇÃO' : col.label}</span>
+                        <strong id="mobile-count-${col.id.replace(/[\/\s]/g, '_')}">0</strong>
+                    </button>
+                `).join('')}
+            </div>
+
+            <!-- Tabuleiro Kanban (4 Colunas no desktop; uma por vez no mobile) -->
             <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; align-items:start;" id="kanban-container">
                 ${STATUS_COLUMNS.map(col => `
-                    <div style="background:#161616; border:1px solid #282828; border-radius:10px; overflow:hidden; min-height:500px; display:flex; flex-direction:column;">
+                    <div class="kanban-status-column${col.id === activeMobileStatus ? ' mobile-active' : ''}" data-status="${col.id}" style="background:#161616; border:1px solid #282828; border-radius:10px; overflow:hidden; min-height:500px; display:flex; flex-direction:column;">
                         <div style="background:${col.bg}; border-bottom:2px solid ${col.color}; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-weight:700; font-size:0.85rem; color:#eee; letter-spacing:0.5px;">${col.label}</span>
                             <span class="badge" id="count-${col.id.replace(/[\/\s]/g, '_')}" style="background:${col.color}; color:#fff;">0</span>
@@ -249,6 +260,22 @@ export async function render(container) {
     const btnSalvar = container.querySelector('#ped-salvar-btn');
     const btnAddPeca = container.querySelector('#ped-add-peca-btn');
     const pecasListDiv = container.querySelector('#ped-pecas-list');
+
+    function selectMobileStatus(status) {
+        activeMobileStatus = status;
+        container.querySelectorAll('.kanban-mobile-tab').forEach(tab => {
+            const active = tab.dataset.status === status;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', String(active));
+        });
+        container.querySelectorAll('.kanban-status-column').forEach(column => {
+            column.classList.toggle('mobile-active', column.dataset.status === status);
+        });
+    }
+
+    container.querySelectorAll('.kanban-mobile-tab').forEach(tab => {
+        tab.addEventListener('click', () => selectMobileStatus(tab.dataset.status));
+    });
 
     container.querySelector('#ped-btn-re-sync').addEventListener('click', async () => {
         const syncRes = await syncDatabase();
@@ -615,7 +642,11 @@ export async function render(container) {
         STATUS_COLUMNS.forEach(col => {
             const cntEl = container.querySelector(`#count-${col.id.replace(/[\/\s]/g, '_')}`);
             if (cntEl) cntEl.textContent = counts[col.id] || 0;
+            const mobileCntEl = container.querySelector(`#mobile-count-${col.id.replace(/[\/\s]/g, '_')}`);
+            if (mobileCntEl) mobileCntEl.textContent = counts[col.id] || 0;
         });
+
+        selectMobileStatus(activeMobileStatus);
 
         container.querySelectorAll('.ped-edit-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {

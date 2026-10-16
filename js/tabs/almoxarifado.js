@@ -115,13 +115,13 @@ export async function render(container) {
     container.querySelector('#almox-save-btn').addEventListener('click', async () => {
         const idVal = container.querySelector('#almox-id').value;
         const fotoInput = container.querySelector('#almox-foto');
+        const existingItem = idVal
+            ? _allItems.find(x => String(x.id) === String(idVal))
+            : null;
 
         let caminho_foto = null;
-        if (idVal) {
-            const idx = _allItems.findIndex(x => String(x.id) === String(idVal));
-            if (idx > -1) {
-                caminho_foto = _allItems[idx].caminho_foto;
-            }
+        if (existingItem) {
+            caminho_foto = existingItem.caminho_foto;
         }
         
         if (fotoInput.files && fotoInput.files.length > 0) {
@@ -138,6 +138,10 @@ export async function render(container) {
         }
 
         const novo = {
+            // Manter os metadados da compra ao editar (inclusive ao marcar como
+            // esgotado). Sem isso, withAutomaticDate() entendia a edição como
+            // uma nova entrada e o gasto reaparecia com a data atual no DRE.
+            ...(existingItem || {}),
             id: idVal ? Number(idVal) : Date.now(),
             nome: container.querySelector('#almox-nome').value.trim() || 'Insumo',
             categoria: container.querySelector('#almox-categoria').value.trim() || 'Geral',
