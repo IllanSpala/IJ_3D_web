@@ -10,7 +10,7 @@ const stores = {
   {id:4,status:'FINALIZADO',nome_cliente:'Zélia',valor_cobrado:30},
   {id:5,status:'FINALIZADO',nome_cliente:'Ana',valor_cobrado:20}],
  filamentos:[{id:1,preco_rolo:20,quantidade_rolos:2,data_compra:'2026-01-10'}],
- ferramentas_insumos:[], vendas_manuais:[]
+ ferramentas_insumos:[{id:1,nome:'Ferramenta',ultimo_valor:15,quantidade:3,data_compra:'2026-01-10'}], vendas_manuais:[{id:1,cliente:'Balcão',preco:25,data:'2026-01-12'}]
 };
 const elements = new Map();
 function element(selector) {
@@ -23,20 +23,25 @@ vm.runInContext(fs.readFileSync('js/tabs/sumario.js','utf8').replace(/^import .*
 (async()=>{
  await context.render({set innerHTML(value){},querySelector:element});
  const totals=()=>element('#dre-totals-container').innerHTML;
- assert.match(totals(),/100,00/); assert.match(totals(),/40,00/); assert.match(totals(),/60,00/);
+ assert.match(totals(),/225,00/); assert.match(totals(),/55,00/); assert.match(totals(),/170,00/);
  assert.doesNotMatch(element('#dre-tbody').innerHTML, /<input|data-save|conferir/);
  assert.doesNotMatch(element('#dre-tbody').innerHTML,/01\/01\/2025/);
  element('#dre-start').value='2026-01-14'; element('#dre-start').events.change();
  assert.match(totals(),/100,00/); assert.doesNotMatch(totals(),/40,00/);
  const rows=element('#dre-tbody').innerHTML;
- assert.ok(rows.indexOf('15/01/2026') < rows.indexOf('Pedido Kanban: Ana'));
- assert.ok(rows.indexOf('Pedido Kanban: Ana') < rows.indexOf('Pedido Kanban: Antigo'));
- assert.ok(rows.indexOf('Pedido Kanban: Antigo') < rows.indexOf('Pedido Kanban: Zélia'));
+ assert.doesNotMatch(rows,/Pedido Kanban: (Ana|Antigo|Zélia)/);
+ assert.match(totals(),/0,00/);
  element('#dre-all').events.click();
  element('#dre-date-order').value='asc'; element('#dre-date-order').events.change();
+ assert.match(totals(),/225,00/); assert.match(totals(),/55,00/); assert.match(totals(),/170,00/);
  const ascending=element('#dre-tbody').innerHTML;
  assert.ok(ascending.indexOf('10/01/2026') < ascending.indexOf('15/01/2026'));
  assert.ok(ascending.indexOf('Pedido Kanban: Ana') < ascending.indexOf('Pedido Kanban: Zélia'));
+ element('#dre-filter').value='pedidos'; element('#dre-filter').events.change();
+ assert.match(totals(),/200,00/); assert.match(totals(),/0,00/);
+ element('#dre-end').value='2026-01-14'; element('#dre-end').events.change();
+ assert.doesNotMatch(element('#dre-tbody').innerHTML,/Pedido Kanban/);
+ assert.doesNotMatch(totals(),/200,00/);
  assert.equal(context.validCashDate('2026-02-30'),false);
  assert.equal(context.cashDate('15/01/2026'),'2026-01-15');
  console.log('PASS: cash dates, legacy pending records, filters, totals, alphabetical legacy ordering and date validation');

@@ -140,13 +140,15 @@ export async function render(container) {
         const start = container.querySelector('#dre-start').value;
         const end = container.querySelector('#dre-end').value;
         const categoryEntries = allEntries.filter(e => cat === 'all' || e.category === cat);
-        const pending = categoryEntries.filter(e => !e.date).sort((a, b) => a.desc.localeCompare(b.desc, 'pt-BR', { sensitivity: 'base' }));
+        // Undated legacy entries belong to the full history, not an arbitrary period.
+        const pending = categoryEntries.filter(e => !e.date && !start && !end).sort((a, b) => a.desc.localeCompare(b.desc, 'pt-BR', { sensitivity: 'base' }));
         const filtered = categoryEntries.filter(e => e.date && (!start || e.date >= start) && (!end || e.date <= end));
         const direction = dateOrderEl.value === 'asc' ? 1 : -1;
         filtered.sort((a, b) => a.date.localeCompare(b.date) * direction);
 
-        const totalRec = filtered.filter(e => e.type === 'receita').reduce((s, e) => s + e.value, 0);
-        const totalDesp = filtered.filter(e => e.type === 'despesa').reduce((s, e) => s + Math.abs(e.value), 0);
+        const visibleEntries = [...filtered, ...pending];
+        const totalRec = visibleEntries.filter(e => e.type === 'receita').reduce((s, e) => s + e.value, 0);
+        const totalDesp = visibleEntries.filter(e => e.type === 'despesa').reduce((s, e) => s + Math.abs(e.value), 0);
         const saldo = totalRec - totalDesp;
         const saldoColor = saldo >= 0 ? '#4ade80' : '#f87171';
 
@@ -165,7 +167,7 @@ export async function render(container) {
             </div>
         `;
 
-        const rows = [...filtered, ...pending].map(e => {
+        const rows = visibleEntries.map(e => {
             const color = e.type === 'receita' ? '#4ade80' : '#f87171';
             const sign = e.type === 'receita' ? '+' : '-';
             return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${formatDate(e.date)}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td></tr>`;
