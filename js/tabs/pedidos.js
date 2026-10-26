@@ -4,7 +4,7 @@
    Colunas: A MODELAR | A IMPRIMIR | IMPRESSO/PINTANDO | ENVIANDO/CONCLUIDO
    ═══════════════════════════════════════════════════════════════ */
 import * as idb from '../db.js';
-import { formatBRL, formatDate, escapeHtml } from '../utils.js';
+import { formatBRL, formatDate, escapeHtml, cashDate, validCashDate } from '../utils.js';
 
 export async function render(container) {
     // 1. Executar verificação/migração dinâmica de pedidos legados
@@ -397,7 +397,7 @@ export async function render(container) {
     });
 
     function renderFinalizados() {
-        const finalizados = pedidos.filter(p => (p.status || '').toUpperCase() === 'FINALIZADO');
+        const finalizados = pedidos.filter(p => (p.status || '').toUpperCase() === 'FINALIZADO').sort((a, b) => (cashDate(b.data_recebimento || b.data_finalizacao || '')).localeCompare(cashDate(a.data_recebimento || a.data_finalizacao || '')));
         
         let html = `
             <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
@@ -405,7 +405,7 @@ export async function render(container) {
                 <button class="btn btn-ghost" onclick="document.getElementById('modal-overlay').click()">✕</button>
             </div>
             <table class="data-table" style="width:100%; text-align:left;">
-                <thead><tr><th>Data Entrega</th><th>Cliente</th><th>Plataforma</th><th>Valor (R$)</th><th>Ações</th></tr></thead>
+                <thead><tr><th>Recebimento</th><th>Cliente</th><th>Plataforma</th><th>Valor (R$)</th><th>Ações</th></tr></thead>
                 <tbody>
         `;
         
@@ -415,7 +415,7 @@ export async function render(container) {
             finalizados.forEach(p => {
                 html += `
                     <tr>
-                        <td>${formatDate(p.data_entrega)}</td>
+                        <td>${formatDate(p.data_recebimento || p.data_finalizacao) || 'Conferir na DRE'}</td>
                         <td>${escapeHtml(p.nome_cliente)}</td>
                         <td>${escapeHtml(p.plataforma_venda)}</td>
                         <td>
@@ -632,7 +632,7 @@ export async function render(container) {
                 <div style="display:flex; justify-content:space-between; gap:6px; flex-wrap:wrap;">
                     ${prevCol ? `<button class="btn btn-ghost ped-move-btn" data-id="${p.id}" data-target="${prevCol.id}" style="font-size:0.72rem; padding:3px 8px; flex:1;">◀ ${prevCol.label.split('/')[0]}</button>` : '<div style="flex:1;"></div>'}
                     ${nextCol ? `<button class="btn btn-ghost ped-move-btn" data-id="${p.id}" data-target="${nextCol.id}" style="font-size:0.72rem; padding:3px 8px; flex:1; background:rgba(0,162,255,0.1); color:#00a2ff; border-color:rgba(0,162,255,0.3);">${nextCol.label.split('/')[0]} ▶</button>` 
-                              : `<button class="btn btn-success ped-move-btn" data-id="${p.id}" data-target="FINALIZADO" style="font-size:0.72rem; padding:3px 8px; flex:1; background:#10b981; color:#fff; border:none; font-weight:bold;">✔ Finalizar</button>`}
+                              : `<button class="btn btn-success ped-move-btn" data-id="${p.id}" data-target="FINALIZADO" style="font-size:0.72rem; padding:3px 8px; flex:1; background:#10b981; color:#fff; border:none; font-weight:bold;">✔ Receber e finalizar</button>`}
                 </div>
             `;
 
@@ -666,6 +666,20 @@ export async function render(container) {
 
                 const p = pedidos.find(item => String(item.id) === String(pedId));
                 if (p) {
+                    if (newStatus === 'FINALIZADO') {
+                        const data = prompt('Data em que o dinheiro entrou no caixa (AAAA-MM-DD):', cashDate(p.data_recebimento || new Date()));
+                        if (data === null) return;
+                        if (!validCashDate(data)) {
+                            alert('Informe uma data válida de recebimento, até hoje.');
+                            return;
+                        }
+                        if (!(Number(p.valor_cobrado) > 0)) {
+                            alert('Informe um valor cobrado maior que zero ao editar o pedido antes de finalizar.');
+                            return;
+                        }
+                        p.data_recebimento = data;
+                        p.data_finalizacao = new Date().toISOString();
+                    }
                     p.status = newStatus;
                     await idb.putAll('pedidos_v2', pedidos);
                     await renderKanban();

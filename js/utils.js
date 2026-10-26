@@ -140,3 +140,20 @@ export function compressImage(file, maxWidth = 800, quality = 0.8) {
         reader.onerror = (err) => reject(err);
     });
 }
+
+/** Calendar date in the user's timezone, including legacy Brazilian dates. */
+export function cashDate(value = new Date()) {
+    const str = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const br = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+export function validCashDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    const d = new Date(`${value}T12:00:00`);
+    return !Number.isNaN(d.getTime()) && cashDate(d) === value && value <= cashDate();
+}

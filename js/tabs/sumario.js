@@ -1,6 +1,6 @@
 /* Tab: Sumário Financeiro */
 import * as idb from '../db.js';
-import { formatBRL, formatDate, escapeHtml, dateTimestamp } from '../utils.js';
+import { formatBRL, formatDate, escapeHtml, cashDate, validCashDate } from '../utils.js';
 
 function financialDate(record, preferredFields = []) {
     const fields = [...preferredFields, 'criado_em', 'created_at', 'added_at'];
@@ -20,31 +20,19 @@ export async function render(container) {
     let fils    = await idb.getAll('filamentos');
     let vendas  = await idb.getAll('vendas_manuais');
 
-    // Backfill once for legacy/imported records. putAll applies the same central
-    // automatic-date rule used by every new write in the system.
-    async function ensureDated(storeName, rows) {
-        if (!rows.some(row => !row.criado_em)) return rows;
-        await idb.putAll(storeName, rows);
-        return idb.getAll(storeName);
-    }
-    pedidos = await ensureDated('pedidos_v2', pedidos);
-    almox = await ensureDated('ferramentas_insumos', almox);
-    fils = await ensureDated('filamentos', fils);
-    vendas = await ensureDated('vendas_manuais', vendas);
-
     let allEntries = [];
 
     // Receitas from pedidos finalizados (Kanban)
     for (const p of pedidos) {
         if ((p.status || '').toUpperCase() === 'FINALIZADO' && p.valor_cobrado) {
-            allEntries.push({ date: financialDate(p, ['data_finalizacao', 'finalizado_em', 'data_entrega']), desc: `Pedido Kanban: ${p.nome_cliente||'—'}`, value: parseFloat(p.valor_cobrado), type: 'receita', category: 'pedidos' });
+            allEntries.push({ date: p.data_recebimento || p.data_finalizacao || p.finalizado_em || null, desc: `Pedido Kanban: ${p.nome_cliente||'—'}`, value: parseFloat(p.valor_cobrado), type: 'receita', category: 'pedidos', record: p, store: 'pedidos_v2' });
         }
     }
     
     // Receitas from Vendas Manuais
     for (const v of vendas) {
         if (v.preco) {
-            allEntries.push({ date: financialDate(v, ['data']), desc: `Venda Manual (${v.cliente}): ${v.descricao_item||'—'}`, value: parseFloat(v.preco), type: 'receita', category: 'vendas_manuais' });
+            allEntries.push({ date: financialDate(v, ['data_recebimento', 'data']), desc: `Venda Manual (${v.cliente}): ${v.descricao_item||'—'}`, value: parseFloat(v.preco), type: 'receita', category: 'vendas_manuais', record: v, store: 'vendas_manuais' });
         }
     }
 
@@ -52,7 +40,7 @@ export async function render(container) {
     for (const f of fils) {
         if (f.preco_rolo) {
             const qtd = parseInt(f.quantidade_rolos) || 1;
-            allEntries.push({ date: financialDate(f, ['data_registro', 'data_compra']), desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos' });
+            allEntries.push({ date: financialDate(f, ['data_pagamento', 'data_compra', 'data_registro']), desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos', record: f, store: 'filamentos' });
         }
     }
     
@@ -63,15 +51,18 @@ export async function render(container) {
         if (a.ultimo_valor) {
             const qtdRaw = parseInt(a.quantidade);
             const qtdLabel = isNaN(qtdRaw) ? '' : ` x${qtdRaw}`;
-            allEntries.push({ date: financialDate(a, ['data', 'data_compra', 'data_registro']), desc: `Insumo/Ferramenta: ${a.nome}${qtdLabel}`, value: -a.ultimo_valor, type: 'despesa', category: 'insumos' });
+            allEntries.push({ date: financialDate(a, ['data_pagamento', 'data_compra', 'data', 'data_registro']), desc: `Insumo/Ferramenta: ${a.nome}${qtdLabel}`, value: -a.ultimo_valor, type: 'despesa', category: 'insumos', record: a, store: 'ferramentas_insumos' });
         }
     }
+
+    allEntries = allEntries.filter(e => Number.isFinite(e.value) && e.value !== 0);
+    allEntries.forEach(e => { e.date = e.date ? cashDate(e.date) : ''; });
 
     container.innerHTML = `
         <div style="max-width:1200px; margin:0 auto;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <h2 style="font-size:1.4rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; margin:0;">
-                    📊 DRE / Sumário Financeiro
+                    📊 DRE / Movimentação de caixa
                 </h2>
                 <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
                     <select id="dre-filter" style="background:#111; border:1px solid #444; color:#fff; padding:8px 12px; border-radius:6px;">
@@ -89,6 +80,14 @@ export async function render(container) {
                 </div>
             </div>
             
+            <p style="color:#aaa; line-height:1.6;">Entradas pela data do recebimento e saídas pela data do pagamento. Finalize pedidos apenas quando receber. Compras sem data de pagamento usam a data disponível no cadastro: confira e ajuste abaixo. Este resumo considera os registros disponíveis, não um saldo bancário.</p>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+                <label>De <input type="date" id="dre-start"></label>
+                <label>Até <input type="date" id="dre-end"></label>
+                <button class="btn btn-ghost" id="dre-month">Este mês</button>
+                <button class="btn btn-ghost" id="dre-all">Todo o histórico</button>
+            </div>
+            <div id="dre-pending" style="color:#fbbf24;margin-bottom:16px;"></div>
             <!-- Modal Venda Manual -->
             <div id="form-venda-manual" style="display:none; background:rgba(30, 30, 30, 0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
                 <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:20px; color:#00a2ff; display:flex; align-items:center; gap:8px;">
@@ -108,13 +107,13 @@ export async function render(container) {
                         <input id="vm-preco" type="number" step="0.01" placeholder="0.00" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
                     </div>
                     <div>
-                        <label style="display:block; font-size:0.8rem; color:#aaa; margin-bottom:4px;">Data (automática se não informada)</label>
+                        <label style="display:block; font-size:0.8rem; color:#aaa; margin-bottom:4px;">Data do recebimento</label>
                         <input id="vm-data" type="date" style="width:100%; background:#111; border:1px solid #444; color:#eee; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
                     </div>
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:8px;">
                     <button class="btn btn-ghost" id="vm-cancelar">Cancelar</button>
-                    <button class="btn btn-success" id="vm-salvar">Salvar Venda</button>
+                    <button class="btn btn-success" id="vm-salvar">Registrar recebimento</button>
                 </div>
             </div>
 
@@ -123,7 +122,7 @@ export async function render(container) {
             <div style="background:#1e1e1e; border-radius:12px; border:1px solid #333; overflow-x:auto;">
                 <table class="data-table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">
                     <thead style="background:#111; border-bottom:1px solid #333;">
-                        <tr><th style="padding:12px; text-align:left; color:#aaa;">Data</th><th style="padding:12px; text-align:left; color:#aaa;">Descrição do Lançamento</th><th style="padding:12px; text-align:right; color:#aaa;">Valor (R$)</th></tr>
+                        <tr><th style="padding:12px; text-align:left; color:#aaa;">Data do caixa</th><th style="padding:12px; text-align:left; color:#aaa;">Descrição do Lançamento</th><th style="padding:12px; text-align:right; color:#aaa;">Valor (R$)</th><th>Corrigir data</th></tr>
                     </thead>
                     <tbody id="dre-tbody"></tbody>
                 </table>
@@ -138,9 +137,16 @@ export async function render(container) {
 
     function updateView() {
         const cat = filterEl.value;
-        const filtered = (cat === 'all' ? [...allEntries] : allEntries.filter(e => e.category === cat));
+        const start = container.querySelector('#dre-start').value;
+        const end = container.querySelector('#dre-end').value;
+        const categoryEntries = allEntries.filter(e => cat === 'all' || e.category === cat);
+        const pending = categoryEntries.filter(e => !e.date);
+        const filtered = categoryEntries.filter(e => e.date && (!start || e.date >= start) && (!end || e.date <= end));
         const direction = dateOrderEl.value === 'asc' ? 1 : -1;
-        filtered.sort((a, b) => (dateTimestamp(a.date) - dateTimestamp(b.date)) * direction);
+        filtered.sort((a, b) => a.date.localeCompare(b.date) * direction);
+        container.querySelector('#dre-pending').textContent = start && end && start > end
+            ? 'O início do período deve ser anterior ao fim.'
+            : pending.length ? `${pending.length} lançamento(s) sem data de recebimento (${formatBRL(pending.reduce((sum, e) => sum + e.value, 0))}). Informe a data abaixo para incluí-los nos totais. Pendências aparecem mesmo fora do período selecionado.` : '';
 
         const totalRec = filtered.filter(e => e.type === 'receita').reduce((s, e) => s + e.value, 0);
         const totalDesp = filtered.filter(e => e.type === 'despesa').reduce((s, e) => s + Math.abs(e.value), 0);
@@ -149,30 +155,63 @@ export async function render(container) {
 
         totalsContainer.innerHTML = `
             <div style="flex:1;min-width:150px;background:rgba(74, 222, 128, 0.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(74, 222, 128, 0.2);border-radius:16px;padding:24px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-                <div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">🟢 Receita Total</div>
+                <div style="color:#4ade80;font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">🟢 Entradas no período</div>
                 <div style="font-size:1.8rem;font-weight:800;color:#4ade80;text-shadow:0 0 10px rgba(74,222,128,0.3);">${formatBRL(totalRec)}</div>
             </div>
             <div style="flex:1;min-width:150px;background:rgba(248, 113, 113, 0.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(248, 113, 113, 0.2);border-radius:16px;padding:24px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-                <div style="color:#f87171;font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">🔴 Despesa Total</div>
+                <div style="color:#f87171;font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">🔴 Saídas no período</div>
                 <div style="font-size:1.8rem;font-weight:800;color:#f87171;text-shadow:0 0 10px rgba(248,113,113,0.3);">${formatBRL(totalDesp)}</div>
             </div>
             <div style="flex:1;min-width:150px;background:rgba(255, 255, 255, 0.03);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255, 255, 255, 0.1);border-radius:16px;padding:24px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-                <div style="color:${saldoColor};font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ Saldo Geral</div>
+                <div style="color:${saldoColor};font-size:0.85rem;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ Resultado do período</div>
                 <div style="font-size:1.8rem;font-weight:800;color:${saldoColor};text-shadow:0 0 10px ${saldoColor}40;">${formatBRL(saldo)}</div>
             </div>
         `;
 
-        const rows = filtered.map(e => {
+        const rows = [...filtered, ...pending].map(e => {
             const color = e.type === 'receita' ? '#4ade80' : '#f87171';
             const sign = e.type === 'receita' ? '+' : '-';
-            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${formatDate(e.date)}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td></tr>`;
+            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${e.date ? formatDate(e.date) : 'Data a conferir'}${e.type === 'despesa' && !e.record.data_pagamento ? '<br><small>Data do cadastro — conferir</small>' : ''}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td><td><input aria-label="Data do caixa" type="date" max="${cashDate()}" value="${e.date}" data-entry="${allEntries.indexOf(e)}"><button class="btn btn-ghost" data-save="${allEntries.indexOf(e)}">Salvar</button></td></tr>`;
         }).join('');
 
-        tbody.innerHTML = rows || '<tr><td colspan="3" style="text-align:center; padding:24px; color:#666;">Nenhum lançamento financeiro registrado.</td></tr>';
+        tbody.innerHTML = rows || '<tr><td colspan="4" style="text-align:center; padding:24px; color:#666;">Nenhum lançamento financeiro registrado.</td></tr>';
     }
 
     filterEl.addEventListener('change', updateView);
     dateOrderEl.addEventListener('change', updateView);
+    for (const selector of ['#dre-start', '#dre-end']) container.querySelector(selector).addEventListener('change', updateView);
+    container.querySelector('#dre-month').addEventListener('click', () => {
+        container.querySelector('#dre-start').value = cashDate().slice(0, 7) + '-01';
+        container.querySelector('#dre-end').value = cashDate();
+        updateView();
+    });
+    container.querySelector('#dre-all').addEventListener('click', () => {
+        container.querySelector('#dre-start').value = '';
+        container.querySelector('#dre-end').value = '';
+        updateView();
+    });
+    tbody.addEventListener('click', async event => {
+        const button = event.target.closest('[data-save]');
+        if (!button) return;
+        const entry = allEntries[Number(button.dataset.save)];
+        const date = tbody.querySelector(`[data-entry="${button.dataset.save}"]`).value;
+        if (!validCashDate(date)) return alert('Informe uma data válida, até hoje.');
+        button.disabled = true;
+        try {
+            const rows = await idb.getAll(entry.store);
+            const record = rows.find(row => String(row.id) === String(entry.record.id));
+            if (!record) throw new Error('Lançamento não encontrado. Reabra a aba.');
+            const field = entry.type === 'receita' ? 'data_recebimento' : 'data_pagamento';
+            record[field] = date;
+            await idb.putAll(entry.store, rows);
+            entry.record[field] = date;
+            entry.date = date;
+            updateView();
+        } catch (error) {
+            alert('Não foi possível salvar a data: ' + error.message);
+            button.disabled = false;
+        }
+    });
     updateView(); // Initial render
 
     const formNovo = container.querySelector('#form-venda-manual');
@@ -181,7 +220,7 @@ export async function render(container) {
     const btnSalvar = container.querySelector('#vm-salvar');
 
     // Set today's date by default
-    container.querySelector('#vm-data').value = new Date().toISOString().split('T')[0];
+    container.querySelector('#vm-data').value = cashDate();
 
     btnToggle.addEventListener('click', () => {
         const isOpen = formNovo.style.display === 'block';
@@ -201,9 +240,9 @@ export async function render(container) {
         const cliente = container.querySelector('#vm-cliente').value.trim();
         const desc = container.querySelector('#vm-desc').value.trim();
         const preco = parseFloat(container.querySelector('#vm-preco').value);
-        const data = container.querySelector('#vm-data').value || new Date().toISOString().slice(0, 10);
+        const data = container.querySelector('#vm-data').value || cashDate();
 
-        if (!cliente || !desc || isNaN(preco)) {
+        if (!cliente || !desc || !Number.isFinite(preco) || preco <= 0 || !validCashDate(data)) {
             alert('Preencha os campos obrigatórios corretamente.');
             return;
         }
@@ -213,6 +252,7 @@ export async function render(container) {
             cliente,
             descricao_item: desc,
             preco,
+            data_recebimento: data,
             data
         };
 
