@@ -4,7 +4,7 @@
    Colunas: A MODELAR | A IMPRIMIR | IMPRESSO/PINTANDO | ENVIANDO/CONCLUIDO
    ═══════════════════════════════════════════════════════════════ */
 import * as idb from '../db.js';
-import { formatBRL, formatDate, escapeHtml, cashDate, validCashDate } from '../utils.js';
+import { formatBRL, formatDate, escapeHtml, cashDate } from '../utils.js';
 
 export async function render(container) {
     // 1. Executar verificação/migração dinâmica de pedidos legados
@@ -667,17 +667,11 @@ export async function render(container) {
                 const p = pedidos.find(item => String(item.id) === String(pedId));
                 if (p) {
                     if (newStatus === 'FINALIZADO') {
-                        const data = prompt('Data em que o dinheiro entrou no caixa (AAAA-MM-DD):', cashDate(p.data_recebimento || new Date()));
-                        if (data === null) return;
-                        if (!validCashDate(data)) {
-                            alert('Informe uma data válida de recebimento, até hoje.');
-                            return;
-                        }
                         if (!(Number(p.valor_cobrado) > 0)) {
                             alert('Informe um valor cobrado maior que zero ao editar o pedido antes de finalizar.');
                             return;
                         }
-                        p.data_recebimento = data;
+                        p.data_recebimento = cashDate();
                         p.data_finalizacao = new Date().toISOString();
                     }
                     p.status = newStatus;

@@ -80,14 +80,12 @@ export async function render(container) {
                 </div>
             </div>
             
-            <p style="color:#aaa; line-height:1.6;">Entradas pela data do recebimento e saídas pela data do pagamento. Finalize pedidos apenas quando receber. Compras sem data de pagamento usam a data disponível no cadastro: confira e ajuste abaixo. Este resumo considera os registros disponíveis, não um saldo bancário.</p>
             <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
                 <label>De <input type="date" id="dre-start"></label>
                 <label>Até <input type="date" id="dre-end"></label>
                 <button class="btn btn-ghost" id="dre-month">Este mês</button>
                 <button class="btn btn-ghost" id="dre-all">Todo o histórico</button>
             </div>
-            <div id="dre-pending" style="color:#fbbf24;margin-bottom:16px;"></div>
             <!-- Modal Venda Manual -->
             <div id="form-venda-manual" style="display:none; background:rgba(30, 30, 30, 0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
                 <h3 style="font-size:1.15rem; font-weight:700; margin-bottom:20px; color:#00a2ff; display:flex; align-items:center; gap:8px;">
@@ -122,7 +120,7 @@ export async function render(container) {
             <div style="background:#1e1e1e; border-radius:12px; border:1px solid #333; overflow-x:auto;">
                 <table class="data-table" style="width:100%; border-collapse:collapse; font-size:0.85rem;">
                     <thead style="background:#111; border-bottom:1px solid #333;">
-                        <tr><th style="padding:12px; text-align:left; color:#aaa;">Data do caixa</th><th style="padding:12px; text-align:left; color:#aaa;">Descrição do Lançamento</th><th style="padding:12px; text-align:right; color:#aaa;">Valor (R$)</th><th>Corrigir data</th></tr>
+                        <tr><th style="padding:12px; text-align:left; color:#aaa;">Data do caixa</th><th style="padding:12px; text-align:left; color:#aaa;">Descrição do Lançamento</th><th style="padding:12px; text-align:right; color:#aaa;">Valor (R$)</th></tr>
                     </thead>
                     <tbody id="dre-tbody"></tbody>
                 </table>
@@ -140,13 +138,10 @@ export async function render(container) {
         const start = container.querySelector('#dre-start').value;
         const end = container.querySelector('#dre-end').value;
         const categoryEntries = allEntries.filter(e => cat === 'all' || e.category === cat);
-        const pending = categoryEntries.filter(e => !e.date);
+        const pending = categoryEntries.filter(e => !e.date).sort((a, b) => a.desc.localeCompare(b.desc, 'pt-BR', { sensitivity: 'base' }));
         const filtered = categoryEntries.filter(e => e.date && (!start || e.date >= start) && (!end || e.date <= end));
         const direction = dateOrderEl.value === 'asc' ? 1 : -1;
         filtered.sort((a, b) => a.date.localeCompare(b.date) * direction);
-        container.querySelector('#dre-pending').textContent = start && end && start > end
-            ? 'O início do período deve ser anterior ao fim.'
-            : pending.length ? `${pending.length} lançamento(s) sem data de recebimento (${formatBRL(pending.reduce((sum, e) => sum + e.value, 0))}). Informe a data abaixo para incluí-los nos totais. Pendências aparecem mesmo fora do período selecionado.` : '';
 
         const totalRec = filtered.filter(e => e.type === 'receita').reduce((s, e) => s + e.value, 0);
         const totalDesp = filtered.filter(e => e.type === 'despesa').reduce((s, e) => s + Math.abs(e.value), 0);
@@ -171,10 +166,10 @@ export async function render(container) {
         const rows = [...filtered, ...pending].map(e => {
             const color = e.type === 'receita' ? '#4ade80' : '#f87171';
             const sign = e.type === 'receita' ? '+' : '-';
-            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${e.date ? formatDate(e.date) : 'Data a conferir'}${e.type === 'despesa' && !e.record.data_pagamento ? '<br><small>Data do cadastro — conferir</small>' : ''}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td><td><input aria-label="Data do caixa" type="date" max="${cashDate()}" value="${e.date}" data-entry="${allEntries.indexOf(e)}"><button class="btn btn-ghost" data-save="${allEntries.indexOf(e)}">Salvar</button></td></tr>`;
+            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${formatDate(e.date)}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td></tr>`;
         }).join('');
 
-        tbody.innerHTML = rows || '<tr><td colspan="4" style="text-align:center; padding:24px; color:#666;">Nenhum lançamento financeiro registrado.</td></tr>';
+        tbody.innerHTML = rows || '<tr><td colspan="3" style="text-align:center; padding:24px; color:#666;">Nenhum lançamento financeiro registrado.</td></tr>';
     }
 
     filterEl.addEventListener('change', updateView);
@@ -189,28 +184,6 @@ export async function render(container) {
         container.querySelector('#dre-start').value = '';
         container.querySelector('#dre-end').value = '';
         updateView();
-    });
-    tbody.addEventListener('click', async event => {
-        const button = event.target.closest('[data-save]');
-        if (!button) return;
-        const entry = allEntries[Number(button.dataset.save)];
-        const date = tbody.querySelector(`[data-entry="${button.dataset.save}"]`).value;
-        if (!validCashDate(date)) return alert('Informe uma data válida, até hoje.');
-        button.disabled = true;
-        try {
-            const rows = await idb.getAll(entry.store);
-            const record = rows.find(row => String(row.id) === String(entry.record.id));
-            if (!record) throw new Error('Lançamento não encontrado. Reabra a aba.');
-            const field = entry.type === 'receita' ? 'data_recebimento' : 'data_pagamento';
-            record[field] = date;
-            await idb.putAll(entry.store, rows);
-            entry.record[field] = date;
-            entry.date = date;
-            updateView();
-        } catch (error) {
-            alert('Não foi possível salvar a data: ' + error.message);
-            button.disabled = false;
-        }
     });
     updateView(); // Initial render
 
