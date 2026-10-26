@@ -60,11 +60,11 @@ export async function render(container) {
 
     container.innerHTML = `
         <div style="max-width:1200px; margin:0 auto;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div class="dre-header">
                 <h2 style="font-size:1.4rem; font-weight:700; color:#fff; display:flex; align-items:center; gap:8px; margin:0;">
                     📊 DRE / Movimentação de caixa
                 </h2>
-                <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+                <div class="dre-header-actions">
                     <select id="dre-filter" style="background:#111; border:1px solid #444; color:#fff; padding:8px 12px; border-radius:6px;">
                         <option value="all">Todas as Categorias</option>
                         <option value="insumos">Apenas Insumos / Ferramentas</option>
@@ -80,11 +80,13 @@ export async function render(container) {
                 </div>
             </div>
             
-            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
-                <label>De <input type="date" id="dre-start"></label>
-                <label>Até <input type="date" id="dre-end"></label>
+            <div class="dre-period-toolbar">
+                <label class="dre-date-field" for="dre-start"><span>De</span><input type="date" id="dre-start"></label>
+                <label class="dre-date-field" for="dre-end"><span>Até</span><input type="date" id="dre-end"></label>
+                <div class="dre-period-actions">
                 <button class="btn btn-ghost" id="dre-month">Este mês</button>
                 <button class="btn btn-ghost" id="dre-all">Todo o histórico</button>
+                </div>
             </div>
             <!-- Modal Venda Manual -->
             <div id="form-venda-manual" style="display:none; background:rgba(30, 30, 30, 0.6); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:24px; margin-bottom:24px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">

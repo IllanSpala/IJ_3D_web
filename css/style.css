@@ -1338,3 +1338,105 @@ a:hover { text-decoration: underline; }
     .color-bar-row > div:nth-child(2) { height: 10px !important; }
     .color-hover-tooltip { display: none !important; }
 }
+
+/* DRE: date fields and shortcuts share the same control baseline. */
+.dre-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.dre-header-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.dre-header-actions > select,
+.dre-header-actions > .btn {
+    height: 42px;
+    box-sizing: border-box;
+    margin: 0;
+}
+.dre-period-toolbar {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    background: #191919;
+    border: 1px solid #303030;
+    border-radius: 12px;
+}
+.dre-date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    margin: 0;
+    color: #aaa;
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+.dre-date-field input {
+    color-scheme: dark;
+    box-sizing: border-box;
+    width: 172px;
+    min-width: 0;
+    height: 42px;
+    margin: 0;
+    padding: 0 12px;
+    border: 1px solid #414141;
+    border-radius: 8px;
+    background: #111;
+    color: #eee;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 400;
+}
+.dre-date-field input:focus-visible,
+.dre-period-actions .btn:focus-visible {
+    outline: 2px solid var(--accent, #00a2ff);
+    outline-offset: 2px;
+}
+.dre-date-field input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: .7;
+}
+.dre-period-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.dre-period-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 42px;
+    margin: 0;
+    padding: 0 16px;
+    border-radius: 8px;
+    background: #232323;
+    color: #ddd;
+    font-size: .85rem;
+    white-space: nowrap;
+}
+.dre-period-actions .btn:hover {
+    background: #303030;
+    border-color: #555;
+}
+@media (max-width: 600px) {
+    .dre-header-actions { width: 100%; }
+    .dre-header-actions > select { min-width: 0; max-width: 100%; flex: 1 1 180px; }
+    .dre-period-toolbar { gap: 12px; padding: 12px; }
+    .dre-date-field { flex: 1 1 calc(50% - 6px); }
+    .dre-date-field input { width: 100%; }
+    .dre-period-actions { width: 100%; }
+    .dre-period-actions .btn { flex: 1; }
+}
