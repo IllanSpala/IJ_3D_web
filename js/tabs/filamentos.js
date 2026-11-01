@@ -2,7 +2,7 @@
    Tab: Filamentos (CRUD Completo)
    ═══════════════════════════════════════════════════════════════ */
 import * as idb from '../db.js';
-import { formatBRL, statusBadgeClass, escapeHtml, placeholderImg, compressImage } from '../utils.js';
+import { formatBRL, statusBadgeClass, escapeHtml, placeholderImg, compressImage, migrateFilamentPurchase, cashDate } from '../utils.js?v=filament-purchase-1';
 
 const PAGE_SIZE = 20;
 let _allItems = [];
@@ -12,18 +12,10 @@ let _statusFilter = 'all';
 
 export async function render(container) {
     let rawItems = await idb.getAll('filamentos');
-    let updated = false;
-    _allItems = rawItems.filter(f => {
-        if (f.status === 'Arquivado') { updated = true; return false; }
-        return true;
-    });
-    for (const f of _allItems) {
-        if ((!f.quantidade_rolos || f.quantidade_rolos === 0) && f.status === 'Ativo') {
-            f.quantidade_rolos = 1;
-            updated = true;
-        }
+    _allItems = rawItems.map(migrateFilamentPurchase);
+    if (_allItems.some((f, i) => f !== rawItems[i])) {
+        await idb.putAll('filamentos', _allItems);
     }
-    if (updated) { await idb.putAll('filamentos', _allItems); }
 
     _displayed = 0;
 
@@ -56,6 +48,9 @@ export async function render(container) {
                 <label>Material <input type="text" id="fil-material" placeholder="PLA, ABS, PETG..." style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label>Cor <input type="text" id="fil-cor" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label>Preço do Rolo (R$) <input type="number" step="0.01" id="fil-preco" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
+                <label>Rolos comprados <input type="number" min="1" step="1" id="fil-comprados" style="width:100%;"></label>
+                <label>Data da compra <input type="date" id="fil-data-compra" style="width:100%;"></label>
+                <small>O contador do card altera apenas o estoque. Para uma nova compra, adicione um filamento. Data antiga desconhecida pode ficar em branco.</small>
                 <label>Status 
                     <select id="fil-status" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;">
                         <option value="Ativo">Ativo</option>
@@ -89,6 +84,8 @@ export async function render(container) {
         container.querySelector('#fil-cor').value = '';
         container.querySelector('#fil-preco').value = '0';
         container.querySelector('#fil-status').value = 'Ativo';
+        container.querySelector('#fil-comprados').value = '1';
+        container.querySelector('#fil-data-compra').value = cashDate();
         container.querySelector('#fil-foto').value = '';
         
         overlay.style.display = 'block';
@@ -131,7 +128,14 @@ export async function render(container) {
             }
         }
 
+        const previous = _allItems.find(x => String(x.id) === String(idVal));
+        const purchased = Number(container.querySelector('#fil-comprados').value);
+        if (!Number.isInteger(purchased) || purchased < 1) {
+            alert('Informe uma quantidade comprada inteira, de pelo menos 1 rolo.');
+            return;
+        }
         const novo = {
+            ...previous,
             id: idVal ? Number(idVal) : Date.now(),
             marca: container.querySelector('#fil-marca').value.trim() || 'Desconhecida',
             material: container.querySelector('#fil-material').value.trim() || 'PLA',
@@ -139,7 +143,10 @@ export async function render(container) {
             preco_rolo: parseFloat(container.querySelector('#fil-preco').value) || 0,
             status: container.querySelector('#fil-status').value,
             caminho_foto: caminho_foto,
-            quantidade_rolos: 0
+            quantidade_rolos: previous?.quantidade_rolos ?? purchased,
+            quantidade_comprada: purchased,
+            data_compra: container.querySelector('#fil-data-compra').value,
+            compra_versao: 1
         };
 
         if (idVal) {
@@ -278,6 +285,8 @@ async function _renderPage(container) {
             container.querySelector('#fil-cor').value = fil.cor || '';
             container.querySelector('#fil-preco').value = fil.preco_rolo || 0;
             container.querySelector('#fil-status').value = fil.status || 'Ativo';
+            container.querySelector('#fil-comprados').value = fil.quantidade_comprada;
+            container.querySelector('#fil-data-compra').value = fil.data_compra ? cashDate(fil.data_compra) : '';
             container.querySelector('#fil-foto').value = '';
             
             container.querySelector('#fil-modal-overlay').style.display = 'block';

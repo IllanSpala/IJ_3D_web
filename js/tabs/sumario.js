@@ -1,6 +1,6 @@
 /* Tab: Sumário Financeiro */
 import * as idb from '../db.js';
-import { formatBRL, formatDate, escapeHtml, cashDate, validCashDate } from '../utils.js';
+import { formatBRL, formatDate, escapeHtml, cashDate, validCashDate, migrateFilamentPurchase } from '../utils.js?v=filament-purchase-1';
 
 function financialDate(record, preferredFields = []) {
     const fields = [...preferredFields, 'criado_em', 'created_at', 'added_at'];
@@ -18,6 +18,9 @@ export async function render(container) {
     let pedidos = await idb.getAll('pedidos_v2');
     let almox   = await idb.getAll('ferramentas_insumos');
     let fils    = await idb.getAll('filamentos');
+    const migratedFils = fils.map(migrateFilamentPurchase);
+    if (migratedFils.some((f, i) => f !== fils[i])) await idb.putAll('filamentos', migratedFils);
+    fils = migratedFils;
     let vendas  = await idb.getAll('vendas_manuais');
 
     let allEntries = [];
@@ -39,8 +42,8 @@ export async function render(container) {
     // Despesas from filamentos
     for (const f of fils) {
         if (f.preco_rolo) {
-            const qtd = parseInt(f.quantidade_rolos) || 1;
-            allEntries.push({ date: financialDate(f, ['data_pagamento', 'data_compra', 'data_registro']), desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos', record: f, store: 'filamentos' });
+            const qtd = Number(f.quantidade_comprada);
+            allEntries.push({ date: (f.data_pagamento || f.data_compra || null), desc: `Filamento: ${f.marca} ${f.material} (${f.cor}) x${qtd}`, value: -(f.preco_rolo * qtd), type: 'despesa', category: 'filamentos', record: f, store: 'filamentos' });
         }
     }
     
@@ -170,7 +173,7 @@ export async function render(container) {
         const rows = visibleEntries.map(e => {
             const color = e.type === 'receita' ? '#4ade80' : '#f87171';
             const sign = e.type === 'receita' ? '+' : '-';
-            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${formatDate(e.date)}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td></tr>`;
+            return `<tr><td style="color:#aaa; border-bottom:1px solid #222; padding:12px;">${e.date ? formatDate(e.date) : 'Data desconhecida'}</td><td style="border-bottom:1px solid #222; padding:12px;">${escapeHtml(e.desc)}</td><td style="color:${color};font-weight:700; border-bottom:1px solid #222; padding:12px; text-align:right;">${sign} ${formatBRL(Math.abs(e.value))}</td></tr>`;
         }).join('');
 
         tbody.innerHTML = rows || '<tr><td colspan="3" style="text-align:center; padding:24px; color:#666;">Nenhum lançamento financeiro registrado.</td></tr>';

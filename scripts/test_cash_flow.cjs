@@ -44,5 +44,19 @@ vm.runInContext(fs.readFileSync('js/tabs/sumario.js','utf8').replace(/^import .*
  assert.doesNotMatch(totals(),/200,00/);
  assert.equal(context.validCashDate('2026-02-30'),false);
  assert.equal(context.cashDate('15/01/2026'),'2026-01-15');
+ // Stock depletion and status edits must not change purchase totals or dates.
+ element('#dre-filter').value='filamentos'; element('#dre-start').value=''; element('#dre-end').value='';
+ stores.filamentos[0].quantidade_rolos=0;
+ stores.filamentos[0].status='Esgotado';
+ await context.render({set innerHTML(value){},querySelector:element});
+ assert.match(totals(),/40,00/);
+ assert.match(element('#dre-tbody').innerHTML,/10\/01\/2026/);
+ stores.filamentos.push({id:19,preco_rolo:94.9,quantidade_rolos:'0',status:'Esgotado',criado_em:'2026-10-31T16:38:57.849Z'});
+ await context.render({set innerHTML(value){},querySelector:element});
+ assert.match(totals(),/134,90/);
+ assert.match(element('#dre-tbody').innerHTML,/Data desconhecida/);
+ element('#dre-start').value='2026-10-01'; element('#dre-start').events.change();
+ assert.match(totals(),/0,00/);
+ assert.doesNotMatch(element('#dre-tbody').innerHTML,/94,90/);
  console.log('PASS: cash dates, legacy pending records, filters, totals, alphabetical legacy ordering and date validation');
 })().catch(error=>{console.error(error);process.exitCode=1;});

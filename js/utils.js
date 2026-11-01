@@ -157,3 +157,23 @@ export function validCashDate(value) {
     const d = new Date(`${value}T12:00:00`);
     return !Number.isNaN(d.getTime()) && cashDate(d) === value && value <= cashDate();
 }
+
+/** Freeze purchase facts independently of the mutable stock counter.
+ * Legacy numeric IDs do not encode a date: criado_em may be an import/edit
+ * timestamp, so keep these purchases undated rather than inventing cash flow.
+ * No historical stock ledger exists; retain at least the one known purchase.
+ */
+export function migrateFilamentPurchase(record) {
+    if (Number(record.compra_versao) >= 1) return record;
+    const id = Number(record.id);
+    const datedId = Number.isFinite(id) && id >= Date.UTC(2000, 0, 1)
+        && id <= Date.now() + 86400000;
+    const quantity = Number.parseInt(record.quantidade_comprada ?? record.quantidade_rolos, 10);
+    return {
+        ...record,
+        quantidade_comprada: Math.max(1, Number.isFinite(quantity) ? quantity : 1),
+        data_compra: record.data_pagamento || record.data_compra || record.data_registro
+            || (datedId ? new Date(id).toISOString() : ''),
+        compra_versao: 1
+    };
+}
