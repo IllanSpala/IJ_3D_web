@@ -182,6 +182,27 @@ export async function deleteItem(storeName, id) {
     });
 }
 
+/** Remove the purchase and its usage links together; never leave orphan usage rows. */
+export async function deleteFilament(id) {
+    if (window.electron) return window.electron.writeDB({ action: 'deleteFilament', id });
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(['filamentos', 'hist_filamentos'], 'readwrite');
+        for (const [store, field] of [['filamentos', 'id'], ['hist_filamentos', 'filamento_id']]) {
+            const request = tx.objectStore(store).openCursor();
+            request.onsuccess = () => {
+                const cursor = request.result;
+                if (!cursor) return;
+                if (String(cursor.value[field]) === String(id)) cursor.delete();
+                cursor.continue();
+            };
+        }
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error || new Error('Não foi possível excluir o filamento.'));
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
 /* ── Media (Blob) helpers ────────────────────────────────────── */
 
 /**

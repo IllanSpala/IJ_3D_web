@@ -299,11 +299,20 @@ async function _renderPage(container) {
         if (btn.dataset.bound) return;
         btn.dataset.bound = "true";
         btn.addEventListener('click', async (e) => {
-            const filId = parseInt(e.target.closest('button').dataset.id);
-            if (confirm('Tem certeza que deseja excluir este filamento?')) {
-                _allItems = _allItems.filter(x => String(x.id) !== String(filId));
-                await idb.putAll('filamentos', _allItems);
-                _resetAndRender(container);
+            const filId = e.target.closest('button').dataset.id;
+            if (btn.disabled) return;
+            if (confirm('Excluir este filamento, sua despesa de compra e seus vínculos no histórico?')) {
+                btn.disabled = true;
+                try {
+                    await idb.deleteFilament(filId);
+                    _allItems = _allItems.filter(x => String(x.id) !== String(filId));
+                    _resetAndRender(container);
+                } catch (err) {
+                    console.error('Erro ao excluir filamento:', err);
+                    alert('Não foi possível excluir o filamento. Tente novamente.');
+                } finally {
+                    btn.disabled = false;
+                }
             }
         });
     });

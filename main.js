@@ -104,7 +104,23 @@ ipcMain.handle('write-db', async (event, req) => {
 
         (async () => {
             try {
-                if (action === 'putAll') {
+                if (action === 'deleteFilament') {
+                    await runQuery('BEGIN TRANSACTION');
+                    try {
+                        // Imported databases may not have a history table yet.
+                        for (const [table, field] of [['hist_filamentos', 'filamento_id'], ['filamentos', 'id']]) {
+                            try {
+                                await runQuery(`DELETE FROM "${table}" WHERE "${field}" = ?`, [id]);
+                            } catch (err) {
+                                if (!err.message.includes('no such table')) throw err;
+                            }
+                        }
+                        await runQuery('COMMIT');
+                    } catch (err) {
+                        await runQuery('ROLLBACK');
+                        throw err;
+                    }
+                } else if (action === 'putAll') {
                     if (rows && rows.length > 0) {
                         await runQuery('BEGIN TRANSACTION');
                         try {

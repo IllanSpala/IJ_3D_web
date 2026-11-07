@@ -10,10 +10,20 @@ let _displayed = 0;
 let _filter = '';
 let _statusFilter = 'Ativo'; // Default filter
 
+// Only explicit legacy account categories are migrated; equipment names are ambiguous.
+function isAccount(item) {
+    if (item.e_conta != null) return [true, 1, '1', 'true'].includes(item.e_conta);
+    return ['conta', 'contas', 'contas mensais'].includes(String(item.categoria || '').trim().toLowerCase());
+}
+
 export async function render(container) {
     let rawItems = await idb.getAll('ferramentas_insumos');
     let updated = false;
     _allItems = rawItems.map(item => {
+        if (item.e_conta == null) {
+            item.e_conta = isAccount(item);
+            updated = true;
+        }
         if (!item.status) {
             const oldStatus = (item.quantidade_status || '').toLowerCase();
             item.status = oldStatus.includes('esgotado') ? 'Esgotado' : 'Ativo';
@@ -30,7 +40,10 @@ export async function render(container) {
         <div class="card">
             <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>📦 Almoxarifado</span>
-                <button class="btn btn-primary" id="almox-add-btn">+ Adicionar Insumo</button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn btn-ghost" id="almox-costs-btn" title="Ver contas mensais" aria-label="Custos — contas mensais">▤ Custos</button>
+                    <button class="btn btn-primary" id="almox-add-btn">+ Adicionar Insumo</button>
+                </div>
             </div>
             <div class="filter-bar">
                 <input type="text" id="almox-search" placeholder="Buscar ferramenta ou insumo…">
@@ -44,6 +57,15 @@ export async function render(container) {
             <div class="load-more-container" id="almox-load-more"></div>
         </div>
 
+        <dialog id="almox-costs-dialog" class="almox-costs-dialog" aria-labelledby="almox-costs-title">
+            <div class="calc-gallery-header">
+                <div><h2 id="almox-costs-title">Custos</h2><p>Contas mensais, como energia e internet.</p></div>
+                <button class="calc-modal-close" id="almox-costs-close" aria-label="Fechar custos">✕</button>
+            </div>
+            <div id="almox-costs-total"></div>
+            <div id="almox-costs-list"></div>
+            <button class="btn btn-ghost" id="almox-costs-add">+ Adicionar conta</button>
+        </dialog>
         <!-- Modal CRUD -->
         <div id="almox-modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:800;"></div>
         <div id="almox-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#1e1e1e; padding:20px; border-radius:12px; border:1px solid #333; z-index:1000; min-width:400px; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
@@ -52,6 +74,8 @@ export async function render(container) {
             
             <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
                 <label>Nome <input type="text" id="almox-nome" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
+                <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="almox-conta"> É uma conta mensal</label>
+                <small>Contas ficam na janela Custos. Cada lançamento representa uma conta; não gera cobranças automáticas.</small>
                 <label>Categoria <input type="text" id="almox-categoria" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label>Preço/Último Valor (R$) <input type="number" step="0.01" id="almox-preco" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label>Link <input type="text" id="almox-link" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
@@ -84,12 +108,33 @@ export async function render(container) {
         _resetAndRender(container);
     });
 
+    const costsDialog = container.querySelector('#almox-costs-dialog');
+    container.querySelector('#almox-costs-btn').addEventListener('click', () => {
+        _renderCosts(container);
+        costsDialog.showModal();
+    });
+    container.querySelector('#almox-costs-close').addEventListener('click', () => costsDialog.close());
+    costsDialog.addEventListener('click', e => {
+        if (e.target === costsDialog) {
+            const rect = costsDialog.getBoundingClientRect();
+            if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) costsDialog.close();
+        }
+    });
+    container.querySelector('#almox-costs-add').addEventListener('click', () => {
+        costsDialog.close();
+        container.querySelector('#almox-add-btn').click();
+        container.querySelector('#almox-conta').checked = true;
+        container.querySelector('#almox-categoria').value = 'CONTAS';
+        container.querySelector('#almox-modal-title').textContent = 'Adicionar Conta';
+    });
+
     const overlay = container.querySelector('#almox-modal-overlay');
     const modal = container.querySelector('#almox-modal');
 
     container.querySelector('#almox-add-btn').addEventListener('click', () => {
         container.querySelector('#almox-modal-title').textContent = 'Adicionar Insumo';
         container.querySelector('#almox-id').value = '';
+        container.querySelector('#almox-conta').checked = false;
         container.querySelector('#almox-nome').value = '';
         container.querySelector('#almox-categoria').value = '';
         container.querySelector('#almox-preco').value = '0';
@@ -143,6 +188,7 @@ export async function render(container) {
             // uma nova entrada e o gasto reaparecia com a data atual no DRE.
             ...(existingItem || {}),
             id: idVal ? Number(idVal) : Date.now(),
+            e_conta: container.querySelector('#almox-conta').checked,
             nome: container.querySelector('#almox-nome').value.trim() || 'Insumo',
             categoria: container.querySelector('#almox-categoria').value.trim() || 'Geral',
             ultimo_valor: parseFloat(container.querySelector('#almox-preco').value) || 0,
@@ -173,6 +219,7 @@ export async function render(container) {
 
 function _getFiltered() {
     return _allItems.filter(item => {
+        if (isAccount(item)) return false;
         if (_statusFilter !== 'all' && (item.status || 'Ativo') !== _statusFilter) return false;
         if (_filter) {
             const hay = `${item.nome} ${item.categoria} ${item.descricao || ''}`.toLowerCase();
@@ -184,6 +231,7 @@ function _getFiltered() {
 
 function _resetAndRender(container) {
     _displayed = 0;
+    if (container.querySelector('#almox-costs-dialog').open) _renderCosts(container);
     const grid = container.querySelector('#almox-grid');
     if (grid) grid.innerHTML = '';
     _renderPage(container);
@@ -224,6 +272,20 @@ async function _renderPage(container) {
 
     _displayed += slice.length;
 
+    _bindActions(container);
+
+    if (_displayed < filtered.length) {
+        loadMore.innerHTML = `<button class="btn btn-ghost" id="almox-more-btn">Carregar mais (${filtered.length - _displayed} restantes)</button>`;
+        loadMore.querySelector('#almox-more-btn').addEventListener('click', () => _renderPage(container));
+    } else {
+        loadMore.innerHTML = '';
+        if (filtered.length === 0) {
+            grid.innerHTML = `<div class="empty-state"><span class="empty-state-icon">📦</span>Nenhum item encontrado.</div>`;
+        }
+    }
+}
+
+function _bindActions(container) {
     // Edit Events
     container.querySelectorAll('.almox-edit-btn').forEach(btn => {
         if (btn.dataset.bound) return;
@@ -233,7 +295,9 @@ async function _renderPage(container) {
             const item = _allItems.find(x => String(x.id) === String(itemId));
             if (!item) return;
 
-            container.querySelector('#almox-modal-title').textContent = 'Editar Insumo';
+            container.querySelector('#almox-costs-dialog').close();
+            container.querySelector('#almox-conta').checked = isAccount(item);
+            container.querySelector('#almox-modal-title').textContent = isAccount(item) ? 'Editar Conta' : 'Editar Insumo';
             container.querySelector('#almox-id').value = item.id;
             container.querySelector('#almox-nome').value = item.nome || '';
             container.querySelector('#almox-categoria').value = item.categoria || '';
@@ -262,13 +326,18 @@ async function _renderPage(container) {
         });
     });
 
-    if (_displayed < filtered.length) {
-        loadMore.innerHTML = `<button class="btn btn-ghost" id="almox-more-btn">Carregar mais (${filtered.length - _displayed} restantes)</button>`;
-        loadMore.querySelector('#almox-more-btn').addEventListener('click', () => _renderPage(container));
-    } else {
-        loadMore.innerHTML = '';
-        if (filtered.length === 0) {
-            grid.innerHTML = `<div class="empty-state"><span class="empty-state-icon">📦</span>Nenhum item encontrado.</div>`;
-        }
-    }
+}
+
+function _renderCosts(container) {
+    const accounts = _allItems.filter(isAccount);
+    const total = accounts.reduce((sum, item) => sum + (Number(item.ultimo_valor) || 0), 0);
+    container.querySelector('#almox-costs-total').textContent = `${accounts.length} conta(s) · Total lançado: ${formatBRL(total)}`;
+    container.querySelector('#almox-costs-list').innerHTML = accounts.length ? accounts.map(item => `
+        <article class="almox-cost-row">
+            <div><h3>${escapeHtml(item.nome)}</h3><small>${escapeHtml(item.categoria || 'Contas')}</small></div>
+            <strong>${formatBRL(item.ultimo_valor || 0)}</strong>
+            <button class="almox-card-action almox-edit-btn" data-id="${escapeHtml(String(item.id))}" aria-label="Editar ${escapeHtml(item.nome)}">✏️</button>
+            <button class="almox-card-action almox-del-btn" data-id="${escapeHtml(String(item.id))}" aria-label="Excluir ${escapeHtml(item.nome)}">🗑️</button>
+        </article>`).join('') : '<div class="empty-state">Nenhuma conta cadastrada. Use “Adicionar conta” para começar.</div>';
+    _bindActions(container);
 }
