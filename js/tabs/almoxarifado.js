@@ -32,7 +32,7 @@ export async function render(container) {
         }
         return item;
     });
-    
+
     if (updated) { await idb.putAll('ferramentas_insumos', _allItems); }
     _displayed = 0;
 
@@ -63,7 +63,7 @@ export async function render(container) {
                 <button class="calc-modal-close" id="almox-costs-close" aria-label="Fechar custos">✕</button>
             </div>
             <div id="almox-costs-total"></div>
-            <div id="almox-costs-list"></div>
+            <div id="almox-costs-list" class="items-grid almox-grid"></div>
             <button class="btn btn-ghost" id="almox-costs-add">+ Adicionar conta</button>
         </dialog>
         <!-- Modal CRUD -->
@@ -71,7 +71,7 @@ export async function render(container) {
         <div id="almox-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#1e1e1e; padding:20px; border-radius:12px; border:1px solid #333; z-index:1000; min-width:400px; box-shadow:0 8px 32px rgba(0,0,0,0.8);">
             <h3 style="margin-top:0; color:#00a2ff;" id="almox-modal-title">Adicionar Insumo</h3>
             <input type="hidden" id="almox-id">
-            
+
             <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
                 <label>Nome <input type="text" id="almox-nome" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;"></label>
                 <label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="almox-conta"> É uma conta mensal</label>
@@ -82,7 +82,7 @@ export async function render(container) {
                 <label>Quantidade (Opcional)
                     <input type="text" id="almox-quantidade" placeholder="Ex: 5 unidades, 2kg..." style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;">
                 </label>
-                <label>Status 
+                <label>Status
                     <select id="almox-status" style="width:100%; background:#111; border:1px solid #444; color:#fff; padding:6px; border-radius:4px;">
                         <option value="Ativo">Ativo</option>
                         <option value="Esgotado">Esgotado</option>
@@ -142,7 +142,7 @@ export async function render(container) {
         container.querySelector('#almox-quantidade').value = '';
         container.querySelector('#almox-status').value = 'Ativo';
         container.querySelector('#almox-foto').value = '';
-        
+
         overlay.style.display = 'block';
         modal.style.display = 'block';
     });
@@ -151,7 +151,7 @@ export async function render(container) {
         overlay.style.display = 'none';
         modal.style.display = 'none';
     });
-    
+
     overlay.addEventListener('click', () => {
         overlay.style.display = 'none';
         modal.style.display = 'none';
@@ -168,7 +168,7 @@ export async function render(container) {
         if (existingItem) {
             caminho_foto = existingItem.caminho_foto;
         }
-        
+
         if (fotoInput.files && fotoInput.files.length > 0) {
             const file = fotoInput.files[0];
             try {
@@ -249,24 +249,7 @@ async function _renderPage(container) {
         const card = document.createElement('div');
         card.className = 'item-card almox-item-card';
 
-        const statusColor = (item.status === 'Esgotado') ? 'badge-depleted' : 'badge-active';
-        
-        card.innerHTML = `
-            <div class="almox-card-actions">
-                <button class="almox-card-action almox-edit-btn" data-id="${item.id}" title="Editar" aria-label="Editar ${escapeHtml(item.nome)}">✏️</button>
-                <button class="almox-card-action almox-del-btn" data-id="${item.id}" title="Excluir" aria-label="Excluir ${escapeHtml(item.nome)}">🗑️</button>
-            </div>
-            <img class="item-card-img almox-card-img" src="${imgUrl || placeholderImg()}" alt="${escapeHtml(item.nome)}">
-            <div class="item-card-info almox-card-info">
-                <h3 title="${escapeHtml(item.nome)}">${escapeHtml(item.nome)}</h3>
-                <div class="almox-card-details">
-                    <span title="Categoria: ${escapeHtml(item.categoria || '—')}">📁 ${escapeHtml(item.categoria || '—')}</span>
-                    <span>💰 ${formatBRL(item.ultimo_valor || 0)}</span>
-                    ${item.quantidade ? `<span title="Quantidade: ${escapeHtml(item.quantidade)}">📦 ${escapeHtml(item.quantidade)}</span>` : ''}
-                </div>
-                <span class="badge ${statusColor} almox-status-badge">${escapeHtml(item.status || 'Ativo')}</span>
-            </div>
-        `;
+        card.innerHTML = _itemCardHTML(item, imgUrl);
         grid.appendChild(card);
     }
 
@@ -306,7 +289,7 @@ function _bindActions(container) {
             container.querySelector('#almox-quantidade').value = item.quantidade || '';
             container.querySelector('#almox-status').value = item.status || 'Ativo';
             container.querySelector('#almox-foto').value = '';
-            
+
             container.querySelector('#almox-modal-overlay').style.display = 'block';
             container.querySelector('#almox-modal').style.display = 'block';
         });
@@ -332,12 +315,40 @@ function _renderCosts(container) {
     const accounts = _allItems.filter(isAccount);
     const total = accounts.reduce((sum, item) => sum + (Number(item.ultimo_valor) || 0), 0);
     container.querySelector('#almox-costs-total').textContent = `${accounts.length} conta(s) · Total lançado: ${formatBRL(total)}`;
-    container.querySelector('#almox-costs-list').innerHTML = accounts.length ? accounts.map(item => `
-        <article class="almox-cost-row">
-            <div><h3>${escapeHtml(item.nome)}</h3><small>${escapeHtml(item.categoria || 'Contas')}</small></div>
-            <strong>${formatBRL(item.ultimo_valor || 0)}</strong>
-            <button class="almox-card-action almox-edit-btn" data-id="${escapeHtml(String(item.id))}" aria-label="Editar ${escapeHtml(item.nome)}">✏️</button>
-            <button class="almox-card-action almox-del-btn" data-id="${escapeHtml(String(item.id))}" aria-label="Excluir ${escapeHtml(item.nome)}">🗑️</button>
-        </article>`).join('') : '<div class="empty-state">Nenhuma conta cadastrada. Use “Adicionar conta” para começar.</div>';
+    const grid = container.querySelector('#almox-costs-list');
+    grid.innerHTML = accounts.length ? accounts.map(item => `
+        <article class="item-card almox-item-card">${_itemCardHTML(item, null)}</article>`).join('')
+        : '<div class="empty-state">Nenhuma conta cadastrada. Use “Adicionar conta” para começar.</div>';
+    // Render the same card immediately, then fill its stored photo when available.
+    const cards = grid.querySelectorAll('.almox-item-card');
+    accounts.forEach(async (item, index) => {
+        try {
+            const url = await idb.resolveMediaUrl(item.caminho_foto);
+            if (url && cards[index]?.isConnected) cards[index].querySelector('img').src = url;
+        } catch (err) {
+            console.error('Erro ao carregar foto da conta:', err);
+        }
+    });
     _bindActions(container);
+}
+
+function _itemCardHTML(item, imgUrl) {
+        const statusColor = (item.status === 'Esgotado') ? 'badge-depleted' : 'badge-active';
+
+        return `
+            <div class="almox-card-actions">
+                <button class="almox-card-action almox-edit-btn" data-id="${item.id}" title="Editar" aria-label="Editar ${escapeHtml(item.nome)}">✏️</button>
+                <button class="almox-card-action almox-del-btn" data-id="${item.id}" title="Excluir" aria-label="Excluir ${escapeHtml(item.nome)}">🗑️</button>
+            </div>
+            <img class="item-card-img almox-card-img" src="${imgUrl || placeholderImg()}" alt="${escapeHtml(item.nome)}">
+            <div class="item-card-info almox-card-info">
+                <h3 title="${escapeHtml(item.nome)}">${escapeHtml(item.nome)}</h3>
+                <div class="almox-card-details">
+                    <span title="Categoria: ${escapeHtml(item.categoria || '—')}">📁 ${escapeHtml(item.categoria || '—')}</span>
+                    <span>💰 ${formatBRL(item.ultimo_valor || 0)}</span>
+                    ${item.quantidade ? `<span title="Quantidade: ${escapeHtml(item.quantidade)}">📦 ${escapeHtml(item.quantidade)}</span>` : ''}
+                </div>
+                <span class="badge ${statusColor} almox-status-badge">${escapeHtml(item.status || 'Ativo')}</span>
+            </div>
+        `;
 }

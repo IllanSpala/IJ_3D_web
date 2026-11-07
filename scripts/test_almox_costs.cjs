@@ -9,7 +9,7 @@ let records = [
 const elements = new Map();
 function el(key) {
  if(!elements.has(key)) elements.set(key,{value:'',checked:false,innerHTML:'',textContent:'',style:{},dataset:{},files:[],events:{},open:false,
- addEventListener(t,f){this.events[t]=f;},appendChild(){},querySelector:el,click(){return this.events.click();},showModal(){this.open=true;},close(){this.open=false;}});
+ addEventListener(t,f){this.events[t]=f;},appendChild(){},querySelector:el,querySelectorAll:()=>[],click(){return this.events.click();},showModal(){this.open=true;},close(){this.open=false;}});
  return elements.get(key);
 }
 const container={innerHTML:'',querySelector:el,querySelectorAll:()=>[]};
@@ -25,6 +25,9 @@ vm.runInContext(fs.readFileSync('js/tabs/almoxarifado.js','utf8').replace(/^impo
  assert.equal(el('#almox-costs-dialog').open,true);
  assert.match(el('#almox-costs-total').textContent,/463,93/);
  assert.match(el('#almox-costs-list').innerHTML,/ENERGIA SETEMBRO/);
+ assert.match(el('#almox-costs-list').innerHTML,/item-card-img almox-card-img/);
+ assert.match(el('#almox-costs-list').innerHTML,/almox-card-details/);
+ assert.match(el('#almox-costs-list').innerHTML,/almox-status-badge/);
  assert.doesNotMatch(el('#almox-costs-list').innerHTML,/Fiação/);
  el('#almox-costs-add').click();
  assert.equal(el('#almox-conta').checked,true);

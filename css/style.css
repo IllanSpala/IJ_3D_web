@@ -1442,15 +1442,11 @@ a:hover { text-decoration: underline; }
 }
 
 /* Monthly accounts share the calculator gallery's restrained appearance. */
-.almox-costs-dialog { margin: auto; width: min(720px, calc(100% - 32px)); max-height: 85dvh; overflow: auto; padding: 24px; border: 1px solid #3a3a3a; border-radius: 16px; color: #eee; background: #1e1e1e; box-shadow: 0 24px 80px #0008; }
+.almox-costs-dialog { margin: auto; width: min(1100px, calc(100% - 32px)); max-height: 85dvh; overflow: auto; padding: 24px; border: 1px solid #3a3a3a; border-radius: 16px; color: #eee; background: #1e1e1e; box-shadow: 0 24px 80px #0008; }
 .almox-costs-dialog::backdrop { background: #000a; backdrop-filter: blur(5px); }
-.almox-costs-dialog p, .almox-cost-row small { color: #999; }
+.almox-costs-dialog p { color: #999; }
 #almox-costs-total { margin: 20px 0 12px; color: #bbb; font-size: .85rem; }
-.almox-cost-row { display: flex; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid #333; }
-.almox-cost-row > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.almox-cost-row h3 { margin: 0 0 4px; font-size: .95rem; }
-.almox-cost-row strong { white-space: nowrap; }
 #almox-costs-add { margin-top: 18px; }
 #almox-conta { width: auto; accent-color: var(--accent); }
 #almox-modal { min-width: 0 !important; width: min(440px, calc(100% - 32px)); max-height: 90dvh; overflow: auto; }
-@media (max-width: 480px) { .almox-costs-dialog { padding: 16px; } .almox-cost-row { gap: 6px; flex-wrap: wrap; } .almox-cost-row > div { flex-basis: 100%; } }
+@media (max-width: 480px) { .almox-costs-dialog { padding: 16px; } }
